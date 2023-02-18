@@ -1,0 +1,645 @@
+import six
+import sys
+sys.modules['sklearn.externals.six'] = six
+import mlrose
+import numpy as np
+from math import floor
+import matplotlib.pyplot as plt
+import networkx as nx
+from operator import itemgetter
+from abc import ABC
+
+def v1(bestSmell, fly):
+    V_r = 0.4
+    items = floor(V_r * bestSmell.size)
+    replace = bestSmell[:items]
+    i = 0
+    for val in fly:
+        if val in replace:
+            fly[np.where(fly == val)[0][0]] = replace[i]
+            i += 1
+            if i == items:
+                break
+
+def mutate(fly):
+    i1 = np.random.randint(0, len(fly)-1)
+    while True:
+        i2 = np.random.randint(0, len(fly)-1)
+        if i1 != i2:
+            break
+    newfly = fly.copy()
+    newfly[i1], newfly[i2] = fly[i2], fly[i1]
+    return newfly
+
+def s1(problem, fly):
+    N =10
+    best_fitness = problem.eval_fitness(fly)
+    best_fly = fly
+    for _ in range(N):
+        newfly = mutate(fly)
+        new_fitness = problem.eval_fitness(newfly)
+        if new_fitness > best_fitness:
+            best_fitness = new_fitness
+            best_fly = newfly
+    return best_fly
+
+def foa(problem, pop_size=200, max_attempts=10,
+                max_iters=2500, curve=False, random_state=None):
+    """Use a standard genetic algorithm to find the optimum for a given
+    optimization problem.
+    Parameters
+    ----------
+    problem: optimization object
+        Object containing fitness function optimization problem to be solved.
+        For example, :code:`DiscreteOpt()`, :code:`ContinuousOpt()` or
+        :code:`TSPOpt()`.
+    pop_size: int, default: 200
+        Size of population to be used in genetic algorithm.
+    mutation_prob: float, default: 0.1
+        Probability of a mutation at each element of the state vector
+        during reproduction, expressed as a value between 0 and 1.
+    max_attempts: int, default: 10
+        Maximum number of attempts to find a better state at each step.
+    max_iters: int, default: np.inf
+        Maximum number of iterations of the algorithm.
+    curve: bool, default: False
+        Boolean to keep fitness values for a curve.
+        If :code:`False`, then no curve is stored.
+        If :code:`True`, then a history of fitness values is provided as a
+        third return value.
+    random_state: int, default: None
+        If random_state is a positive integer, random_state is the seed used
+        by np.random.seed(); otherwise, the random seed is not set.
+    Returns
+    -------
+    best_state: array
+        Numpy array containing state that optimizes the fitness function.
+    best_fitness: float
+        Value of fitness function at best state.
+    fitness_curve: array
+        Numpy array of arrays containing the fitness of the entire population
+        at every iteration.
+        Only returned if input argument :code:`curve` is :code:`True`.
+    References
+    ----------
+    Russell, S. and P. Norvig (2010). *Artificial Intelligence: A Modern
+    Approach*, 3rd edition. Prentice Hall, New Jersey, USA.
+    """
+    if pop_size < 0:
+        raise Exception("""pop_size must be a positive integer.""")
+    elif not isinstance(pop_size, int):
+        if pop_size.is_integer():
+            pop_size = int(pop_size)
+        else:
+            raise Exception("""pop_size must be a positive integer.""")
+
+    if (not isinstance(max_attempts, int) and not max_attempts.is_integer()) \
+       or (max_attempts < 0):
+        raise Exception("""max_attempts must be a positive integer.""")
+
+    if (not isinstance(max_iters, int) and max_iters != np.inf
+            and not max_iters.is_integer()) or (max_iters < 0):
+        raise Exception("""max_iters must be a positive integer.""")
+
+    # Set random seed
+    if isinstance(random_state, int) and random_state > 0:
+        np.random.seed(random_state)
+
+    if curve:
+        fitness_curve = []
+
+    # Initialize problem, population and attempts counter
+    problem.reset()
+    problem.random_pop(pop_size)
+    attempts = 0
+    iters = 0
+
+    while (attempts < max_attempts) and (iters < max_iters):
+        iters += 1
+
+        # Create next generation of population
+        next_gen = []
+
+        is_smell_concentration_equal = True
+
+        currentBest = problem.best_child()
+        currentFitness = problem.eval_fitness(currentBest)
+
+        for i in range(pop_size):
+            # Select parents
+            fly = problem.get_population()[i]
+            if currentFitness != problem.eval_fitness(fly):
+                is_smell_concentration_equal = False
+                break
+
+        if (is_smell_concentration_equal):
+            for i in range(pop_size):
+                # Select parents
+                fly = problem.get_population()[i]
+                best_fly = s1(problem, fly)
+                next_gen.append(best_fly)
+        else:
+            for i in range(pop_size):
+                # Select parents
+                fly = problem.get_population()[i]
+                if not np.array_equal(fly, currentBest):
+                    v1(currentBest, fly)
+                next_gen.append(fly)
+
+        next_gen = np.array(next_gen)
+        problem.set_population(next_gen)
+
+        next_state = problem.best_child()
+        next_fitness = problem.eval_fitness(next_state)
+
+        # If best child is an improvement,
+        # move to that state and reset attempts counter
+        if next_fitness > problem.get_fitness():
+            problem.set_state(next_state)
+            attempts = 0
+
+        else:
+            attempts += 1
+
+        if curve:
+            fitness_curve.append(problem.get_fitness())
+
+    best_fitness = problem.get_maximize()*problem.get_fitness()
+    best_state = problem.get_state()
+
+    if curve:
+        return best_state, best_fitness, np.asarray(fitness_curve)
+
+    return best_state, best_fitness
+
+class TravellingSalesDirected(mlrose.fitness.TravellingSales):
+    """Fitness function for Travelling Salesman optimization problem.
+    Evaluates the fitness of a tour of n nodes, represented by state vector
+    :math:`x`, giving the order in which the nodes are visited, as the total
+    distance travelled on the tour (including the distance travelled between
+    the final node in the state vector and the first node in the state vector
+    during the return leg of the tour). Each node must be visited exactly
+    once for a tour to be considered valid.
+
+    Parameters
+    ----------
+    coords: list of pairs, default: None
+        Ordered list of the (x, y) coordinates of all nodes (where element i
+        gives the coordinates of node i). This assumes that travel between
+        all pairs of nodes is possible. If this is not the case, then use
+        :code:`distances` instead.
+
+    distances: list of triples, default: None
+        List giving the distances, d, between all pairs of nodes, u and v, for
+        which travel is possible, with each list item in the form (u, v, d).
+        Order of the nodes does not matter, so (u, v, d) and (v, u, d) are
+        considered to be the same. If a pair is missing from the list, it is
+        assumed that travel between the two nodes is not possible. This
+        argument is ignored if coords is not :code:`None`.
+
+    Examples
+    --------
+    .. highlight:: python
+    .. code-block:: python
+
+        >>> import mlrose
+        >>> import numpy as np
+        >>> coords = [(0, 0), (3, 0), (3, 2), (2, 4), (1, 3)]
+        >>> dists = [(0, 1, 3), (0, 2, 5), (0, 3, 1), (0, 4, 7), (1, 3, 6),
+                     (4, 1, 9), (2, 3, 8), (2, 4, 2), (3, 2, 8), (3, 4, 4)]
+        >>> fitness_coords = mlrose.TravellingSales(coords=coords)
+        >>> state = np.array([0, 1, 4, 3, 2])
+        >>> fitness_coords.evaluate(state)
+        13.86138...
+        >>> fitness_dists = mlrose.TravellingSales(distances=dists)
+        >>> fitness_dists.evaluate(state)
+        29
+
+    Note
+    ----
+    1. The TravellingSales fitness function is suitable for use in travelling
+       salesperson (tsp) optimization problems *only*.
+    2. It is necessary to specify at least one of :code:`coords` and
+       :code:`distances` in initializing a TravellingSales fitness function
+       object.
+    """
+
+    def __init__(self, coords=None, distances=None):
+        super().__init__(coords, distances)
+
+        # Split into separate lists
+        node1_list, node2_list, dist_list = zip(*distances)
+
+        if min(dist_list) < 0:
+            raise Exception("""The distance between each pair of nodes"""
+                            + """ must be greater than or equal to 0.""")
+        if min(node1_list + node2_list) < 0:
+            raise Exception("""The minimum node value must be 0.""")
+
+        if not max(node1_list + node2_list) == \
+                (len(set(node1_list + node2_list)) - 1):
+            raise Exception("""All nodes must appear at least once in"""
+                            + """ distances.""")
+
+        path_list = list(zip(node1_list, node2_list))
+
+        self.distances = distances
+        self.path_list = path_list
+        self.dist_list = dist_list
+        print(self.path_list)
+
+    def evaluate(self, state):
+        """Evaluate the fitness of a state vector.
+
+        Parameters
+        ----------
+        state: array
+            State array for evaluation. Each integer between 0 and
+            (len(state) - 1), inclusive must appear exactly once in the array.
+
+        Returns
+        -------
+        fitness: float
+            Value of fitness function. Returns :code:`np.inf` if travel between
+            two consecutive nodes on the tour is not possible.
+        """
+
+        if self.is_coords and len(state) != len(self.coords):
+            raise Exception("""state must have the same length as coords.""")
+
+        if not len(state) == len(set(state)):
+            raise Exception("""Each node must appear exactly once in state.""")
+
+        if min(state) < 0:
+            raise Exception("""All elements of state must be non-negative"""
+                            + """ integers.""")
+
+        if max(state) >= len(state):
+            raise Exception("""All elements of state must be less than"""
+                            + """ len(state).""")
+
+        fitness = 0
+
+        # Calculate length of each leg of journey
+        for i in range(len(state) - 1):
+            node1 = state[i]
+            node2 = state[i + 1]
+
+            if self.is_coords:
+                fitness += np.linalg.norm(np.array(self.coords[node1])
+                                          - np.array(self.coords[node2]))
+            else:
+                path = (node1, node2)
+                
+                if path in self.path_list:
+                    fitness += self.dist_list[self.path_list.index(path)]
+                else:
+                    print(path)
+                    fitness += np.inf
+
+        # Calculate length of final leg
+        node1 = state[-1]
+        node2 = state[0]
+
+        if self.is_coords:
+            fitness += np.linalg.norm(np.array(self.coords[node1])
+                                      - np.array(self.coords[node2]))
+        else:
+            path = (node1, node2)
+
+            if path in self.path_list:
+                fitness += self.dist_list[self.path_list.index(path)]
+            else:
+                fitness += np.inf
+
+        return fitness
+
+
+class Warehouse(ABC):
+    def __init__(self, nRows=10, lotsPerRow=10):
+        self.G = nx.Graph()
+        self.randomPositions = []
+        self.nRows = nRows
+        self.lotsPerRow = lotsPerRow
+        self.paths = []
+
+    def Block(self):
+        board = np.zeros((3*self.nRows,self.lotsPerRow+2))
+        for i in range(1,3*self.nRows,3):
+            board[i-1,1:-1]=1
+            board[i+1,1:-1]=1
+        board[1,0]=1/4
+        return board
+
+    def addTargetsToBlock(self, board):
+        for target in self.randomPositions:
+            x = 1 + 3*floor(target[0]/2)+ (1 if target[0]%2 == 1 else -1)
+            y = target[1]
+            board[x,y] = 1/2
+
+    def createGraph(self, nLots=5):
+        '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        for _ in range(nLots):
+            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow))
+            #while randomLocation in randomPositions:
+            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            self.randomPositions.append(randomLocation)
+
+        nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
+        nodePositions = sorted(nodePositions, key=itemgetter(0,1))
+
+        self.G.add_node(0, pos=(0,0))
+        for i in range(len(nodePositions)):
+            self.G.add_node(i+1, pos=nodePositions[i])
+
+        nNodes = len(nodePositions) + 1
+        edges = []
+        frontAisle = 0
+        backAisle = 1
+        j = 1
+        last = 0
+        for i in range(self.nRows):
+            if i!=0:
+                self.G.add_node(nNodes, pos=(i,0))
+                edges.append((frontAisle, nNodes, {"weight": 3}))
+                frontAisle = nNodes
+                last = nNodes
+                nNodes += 1
+            y = 0
+            while (j <= len(nodePositions) and nodePositions[j-1][0] == i):
+                edges.append((last, j, {"weight": nodePositions[j-1][1]-y}))
+                y = nodePositions[j-1][1]
+                last = j
+                j += 1
+
+            self.G.add_node(nNodes, pos=(i,self.lotsPerRow+1))
+            edges.append((last, nNodes, {"weight": self.lotsPerRow+1-y}))
+            if i!=0:
+                edges.append((backAisle, nNodes, {"weight": 3}))
+            backAisle = nNodes
+            nNodes += 1
+
+        self.G.add_edges_from(edges)
+
+    def findShortestPath(self, nLots):
+        dist = []
+        all_paths_iter = nx.all_pairs_dijkstra(self.G)
+        # first node done -- now process the rest
+        for u, (distance, path) in all_paths_iter:
+            if u >= nLots:
+                break
+            for i in range(u+1,nLots+1):
+                if i != u:
+                    dist.append((u,i,distance[i]))
+                    self.paths.append((u,i,path[i]))
+        return dist
+
+    def plotRoutes(self, route):
+        board = np.zeros((3*self.nRows,self.lotsPerRow+2))
+        pos=nx.get_node_attributes(self.G,'pos')
+        for i in range(len(route)):
+            p1 = pos[route[i-1]]
+            p2 = pos[route[i]]
+            if p1[0] == p2[0]:
+                y1 = min(p1[1],p2[1])
+                y2 = max(p1[1],p2[1])
+                x = 1 + 3*p1[0]
+                board[x,y1:y2+1] = 1/2
+            else:
+                x1 = 1 + 3*min(p1[0],p2[0])
+                x2 = 1 + 3*max(p1[0],p2[0])
+                y = p1[1]
+                board[x1:x2+1,y] = 1/2
+        return board
+
+    def edgeListFromState(self, state):
+        route = np.array([])
+        for i in range(len(state)):
+            for source, target, path in self.paths:
+                if source == state[i] and target == state[(i+1)%len(state)]:
+                    route = np.concatenate((route, path), axis=0)
+                    break
+                elif source == state[(i+1)%len(state)] and target == state[i]:
+                    route = np.concatenate((route, path[::-1]), axis=0)
+                    break
+
+        return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
+
+    def solve(self, count=22):
+        self.createGraph(nLots=count)
+        mDist = self.findShortestPath(count)
+        
+        #fitness_dists = mlrose.TravellingSales(distances = mDist)
+        problem_fit = mlrose.TSPOpt(length = count+1, distances = mDist, # fitness_fn = fitness_dists,
+                                    maximize=False)
+
+        best_state, best_fitness = foa(problem_fit, random_state = 2, max_attempts = 20)
+
+        print('The best state found is: ', best_state)
+        print('The fitness at the best state is: ', best_fitness)
+        #self.plot(best_state)
+        return best_state
+
+    def plot(self, best_state):
+        myedgelist, route = self.edgeListFromState(best_state)
+        B = self.Block()
+        self.addTargetsToBlock(B)
+        pos=nx.get_node_attributes(self.G,'pos')
+        plt.subplot(121)
+        nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        plt.subplot(122)
+        nx.draw(self.G, pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
+        plt.figure()
+        plt.imshow(B)
+        plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
+        plt.show()
+
+class WarehouseOneDirection(Warehouse):
+    def __init__(self, nRows=10, lotsPerRow=10):
+        super().__init__(nRows, lotsPerRow)
+        self.G = nx.DiGraph()
+
+    def createGraph(self, nLots=5):
+        '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        for _ in range(nLots):
+            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow))
+            #while randomLocation in randomPositions:
+            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            self.randomPositions.append(randomLocation)
+
+        nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
+        nodePositions = sorted(nodePositions, key=itemgetter(0,1))
+
+        self.G.add_node(0, pos=(0,0))
+        for i in range(len(nodePositions)):
+            self.G.add_node(i+1, pos=nodePositions[i])
+
+        nNodes = len(nodePositions) + 1
+        edges = []
+        frontAisle = 0
+        backAisle = 1
+        j = 1
+        last = 0
+        for i in range(self.nRows):
+            if i!=0:
+                self.G.add_node(nNodes, pos=(i,0))
+                edges.append((nNodes, frontAisle, {"weight": 3}))
+                frontAisle = nNodes
+                last = nNodes
+                nNodes += 1
+            y = 0
+            while (j <= len(nodePositions) and nodePositions[j-1][0] == i):
+                if i%2 == 0:
+                    edges.append((last, j, {"weight": nodePositions[j-1][1]-y}))
+                if i%2 == 1:
+                    edges.append((j, last, {"weight": nodePositions[j-1][1]-y}))
+                y = nodePositions[j-1][1]
+                last = j
+                j += 1
+
+            self.G.add_node(nNodes, pos=(i,self.lotsPerRow+1))
+            if i%2 == 0:
+                edges.append((last, nNodes, {"weight": self.lotsPerRow+1-y}))
+            if i%2 == 1:
+                edges.append((nNodes, last, {"weight": self.lotsPerRow+1-y}))
+            
+            if i!=0:
+                edges.append((backAisle, nNodes, {"weight": 3}))
+            backAisle = nNodes
+            nNodes += 1
+
+        self.G.add_edges_from(edges)
+
+    def findShortestPath(self, nLots):
+        dist = []
+        all_paths_iter = nx.all_pairs_dijkstra(self.G)
+        # first node done -- now process the rest
+        for u, (distance, path) in all_paths_iter:
+            if u > nLots:
+                break
+            for i in range(nLots+1):
+                if i != u:
+                    dist.append((u,i,distance[i]))
+                    self.paths.append((u,i,path[i]))
+        return dist
+        
+    def edgeListFromState(self, state):
+        route = np.array([])
+        for i in range(len(state)):
+            for source, target, path in self.paths:
+                if source == state[i] and target == state[(i+1)%len(state)]:
+                    route = np.concatenate((route, path), axis=0)
+                    break
+
+        return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
+
+    def solve(self, count=22):
+        self.createGraph(nLots=count)
+        mDist = self.findShortestPath(count)
+        
+        #fitness_dists = mlrose.TravellingSales(distances = mDist)
+        problem_fit = mlrose.TSPOpt(length = count+1, distances = mDist, fitness_fn = TravellingSalesDirected(distances=mDist),
+                                    maximize=False)
+
+        best_state, best_fitness = foa(problem_fit, random_state = 2, max_attempts = 20)
+
+        print('The best state found is: ', best_state)
+        print('The fitness at the best state is: ', best_fitness)
+        #self.plot(best_state)
+        return best_state
+
+class WarehouseWithAisles(Warehouse):
+    def __init__(self, nRows=10, lotsPerRow=10,aisles=[5]):
+        super().__init__(nRows, lotsPerRow)
+        self.aisles = aisles
+    
+    def Block(self):
+        board = np.zeros((3*self.nRows,self.lotsPerRow+2))
+        for i in range(1,3*self.nRows,3):
+            board[i-1,1:-1]=1
+            board[i+1,1:-1]=1
+            for j in self.aisles:
+                board[i-1,j]=0
+            board[i+1,j]=0
+        board[1,0]=1/4
+        return board
+
+    def createGraph(self, nLots=5):
+        '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        for _ in range(nLots):
+            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow-len(self.aisles)))
+            #while randomLocation in randomPositions:
+            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            self.randomPositions.append(randomLocation)
+
+        nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
+        nodePositions = sorted(nodePositions, key=itemgetter(0,1))
+
+        self.G.add_node(0, pos=(0,0))
+        for i in range(len(nodePositions)):
+            self.G.add_node(i+1, pos=nodePositions[i])
+
+        nNodes = len(nodePositions) + 1
+        edges = []
+        frontAisle = 0
+        backAisle = 1
+        j = 1
+        last = 0
+        lastAisleNodes = {}
+        for i in range(self.nRows):
+            if i!=0:
+                self.G.add_node(nNodes, pos=(i,0))
+                edges.append((frontAisle, nNodes, {"weight": 3}))
+                frontAisle = nNodes
+                last = nNodes
+                nNodes += 1
+            y = 0
+            aisleIndex = 0
+            while (j <= len(nodePositions) and nodePositions[j-1][0] == i):
+                while aisleIndex < len(self.aisles) and nodePositions[j-1][1] > self.aisles[aisleIndex]:
+                    self.G.add_node(nNodes, pos=(i,self.aisles[aisleIndex]))
+                    edges.append((last, nNodes, {"weight": self.aisles[aisleIndex]-y}))
+                    last = nNodes
+                    if i!=0:
+                        edges.append((lastAisleNodes[aisleIndex], nNodes, {"weight": 3}))
+                    lastAisleNodes[aisleIndex] = nNodes
+                    nNodes += 1
+                    y = self.aisles[aisleIndex]
+                    aisleIndex += 1
+                    
+                edges.append((last, j, {"weight": nodePositions[j-1][1]-y}))
+                y = nodePositions[j-1][1]
+                last = j
+                j += 1
+
+            while aisleIndex < len(self.aisles):
+                self.G.add_node(nNodes, pos=(i,self.aisles[aisleIndex]))
+                if i!=0:
+                    edges.append((lastAisleNodes[aisleIndex], nNodes, {"weight": 3}))
+                lastAisleNodes[aisleIndex] = nNodes
+                edges.append((last, nNodes, {"weight": self.aisles[aisleIndex]-y}))
+                last = nNodes
+                nNodes += 1
+                y = self.aisles[aisleIndex]
+                aisleIndex += 1
+            aisleIndex = 0
+
+            self.G.add_node(nNodes, pos=(i,self.lotsPerRow+1))
+            edges.append((last, nNodes, {"weight": self.lotsPerRow+1-y}))
+            if i!=0:
+                edges.append((backAisle, nNodes, {"weight": 3}))
+            backAisle = nNodes
+            nNodes += 1
+
+        self.G.add_edges_from(edges)
+
+        pos=nx.get_node_attributes(self.G,'pos')
+        plt.subplot(121)
+        nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        plt.show()
+
+
+np.random.seed(1)
+warehouse = WarehouseWithAisles()
+best_state = warehouse.solve(count=5)
+warehouse.plot(best_state)

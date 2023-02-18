@@ -5,64 +5,64 @@ def Fitness(x):
     return x**2 - 5
 
 def FOA(maxgen,sizepop):
-    # 随机初始果蝇位置
+    # Random initial fruit fly location
     X_axis = 10 * np.random.rand()
     Y_axis = 10 * np.random.rand()
 
-    # 果蝇寻优开始，利用嗅觉寻找食物
+    # Fruit flies begin their search for excellence, using their sense of smell to find food
     X = []
     Y = []
     D = []
     S = []
     Smell = []
     for i in range(sizepop):
-        # 赋予果蝇个体利用嗅觉搜寻食物之随机方向与距离
+        # Giving Drosophila individuals the ability to search for food using olfaction in random directions and distances
         X.append(X_axis + 2 * np.random.rand() - 1)
         Y.append(Y_axis + 2 * np.random.rand() - 1)
 
-        # 由于无法得知食物位置，因此先估计与原点的距离（Dist），再计算味道浓度判定值（S），此值为距离的倒数
+        # Since the location of the food is not known, the distance to the origin (Dist) is estimated first, and then the taste concentration determination value (S) is calculated, which is the inverse of the distance
         D.append((X[i]**2 + Y[i]**2)**0.5)
         S.append(1 / D[i])
 
-        # 味道浓度判定值（S）代入味道浓度判定函数（或称为Fitness function），以求出该果蝇个体位置的味道浓度（Smell(i))
+        # The taste concentration determination value (S) is substituted into the taste concentration determination function (or Fitness function) to find the taste concentration (Smell(i)) at the location of the individual fruit fly.
         Smell.append(Fitness(S[i]))
 
-    # 找出此果蝇群里中味道浓度最低的果蝇（求极小值）
+    # Identify the Drosophila with the lowest flavor concentration in this Drosophila population (find the minimum value)
     bestSmell, bestindex = min(Smell),Smell.index(min(Smell))
 
-    # 保留最佳味道浓度值与x，y的坐标，此时果蝇群里利用视觉往该位置飞去
+    # Retain the best flavor concentration value with the coordinates of x, y. At this time, the fruit flies in the swarm use vision to fly to the location
     X_axis = X[bestindex]
     Y_axis = Y[bestindex]
     Smellbest = bestSmell
 
-    # 果蝇迭代寻优开始
+    # Drosophila iterative merit search begins
     yy = []
     Xbest = []
     Ybest = []
     for g in range(maxgen):
-        # 赋予果蝇个体利用嗅觉搜寻食物的随机方向和距离
+        # Giving Drosophila individuals the ability to search for food using olfaction in random directions and distances
         for i in range(sizepop):
-            # 赋予果蝇个体利用嗅觉搜寻食物之随机方向与距离
+            # Giving Drosophila individuals the ability to search for food using olfaction in random directions and distances
             X[i] = X_axis + 2 * np.random.rand() - 1
             Y[i] = Y_axis + 2 * np.random.rand() - 1
 
-            # 由于无法得知食物位置，因此先估计与原点的距离（Dist），再计算味道浓度判定值（S），此值为距离的倒数
+            # Since the location of the food is not known, the distance to the origin (Dist) is estimated first, and then the taste concentration determination value (S) is calculated, which is the inverse of the distance
             D[i] = (X[i]**2 + Y[i]**2)**0.5
             S[i] = 1 / D[i]
 
-            # 味道浓度判定值（S）代入味道浓度判定函数（或称为Fitness function），以求出该果蝇个体位置的味道浓度（Smell(i))
+            # The taste concentration determination value (S) is substituted into the taste concentration determination function (or Fitness function) to find the taste concentration (Smell(i)) at the location of the individual fruit fly.
             Smell[i] = Fitness(S[i])
 
-        # 找出此果蝇群里中味道浓度最低的果蝇（求极小值）
+        # Identify the Drosophila with the lowest flavor concentration in this Drosophila population (find the minimum value)
         bestSmell, bestindex = min(Smell),Smell.index(min(Smell))
 
-        # 判断味道浓度是否优于前一次迭代味道浓度，若是则保留最佳味道浓度值与x，y的坐标，此时果蝇群体利用视觉往该位置飞去
+        # Determine whether the flavor concentration is better than the previous iteration of flavor concentration, and if so, keep the best flavor concentration value with the coordinates of x, y. At this time, the fruit fly population uses vision to fly to that location
         if bestSmell < Smellbest:
             X_axis = X[bestindex]
             Y_axis = Y[bestindex]
             Smellbest = bestSmell
 
-        # 每次最优Semll值记录到yy数组中，并记录最优迭代坐标
+        # Each optimal Smell value is recorded into the yy array and the optimal iteration coordinates are recorded
         yy.append(Smellbest)
         Xbest.append(X_axis)
         Ybest.append(Y_axis)
