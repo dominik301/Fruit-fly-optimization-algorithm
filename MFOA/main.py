@@ -8,18 +8,35 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from operator import itemgetter
 from abc import ABC
+import time
 
-def v1(bestSmell, fly):
-    V_r = 0.4
+def v1(bestSmell, fly, V_r=0.4):
     items = floor(V_r * bestSmell.size)
     replace = bestSmell[:items]
     i = 0
+    newfly = fly.copy()
     for val in fly:
         if val in replace:
-            fly[np.where(fly == val)[0][0]] = replace[i]
+            newfly[np.where(fly == val)[0][0]] = replace[i]
             i += 1
             if i == items:
                 break
+    return newfly
+
+def v3(bestSmell, fly, V_r=0.4):
+    items = floor(V_r * bestSmell.size)
+    start = np.random.randint(0, len(fly)-1)
+    bestSmell = np.append(bestSmell, bestSmell)
+    replace = bestSmell[start:start+items]
+    
+    newfly = np.array([],dtype=int)
+    for val in fly:
+        if not val in replace:
+            newfly = np.append(newfly,[val])
+        if val in replace and not val in newfly:
+            newfly = np.append(newfly, replace)
+            
+    return newfly
 
 def mutate(fly):
     i1 = np.random.randint(0, len(fly)-1)
@@ -31,11 +48,10 @@ def mutate(fly):
     newfly[i1], newfly[i2] = fly[i2], fly[i1]
     return newfly
 
-def s1(problem, fly):
-    N =10
+def s1(problem, fly, NN=10):
     best_fitness = problem.eval_fitness(fly)
     best_fly = fly
-    for _ in range(N):
+    for _ in range(NN):
         newfly = mutate(fly)
         new_fitness = problem.eval_fitness(newfly)
         if new_fitness > best_fitness:
@@ -44,7 +60,7 @@ def s1(problem, fly):
     return best_fly
 
 def foa(problem, pop_size=200, max_attempts=10,
-                max_iters=2500, curve=False, random_state=None):
+                max_iters=2500, curve=False, random_state=None, V_r=0.4, NN=10):
     """Use a standard genetic algorithm to find the optimum for a given
     optimization problem.
     Parameters
@@ -130,20 +146,20 @@ def foa(problem, pop_size=200, max_attempts=10,
             fly = problem.get_population()[i]
             if currentFitness != problem.eval_fitness(fly):
                 is_smell_concentration_equal = False
-                break
-
-        if (is_smell_concentration_equal):
-            for i in range(pop_size):
-                # Select parents
-                fly = problem.get_population()[i]
-                best_fly = s1(problem, fly)
-                next_gen.append(best_fly)
-        else:
+                
+            best_fly = s1(problem, fly, NN)
+            next_gen.append(best_fly)
+        if not is_smell_concentration_equal:
+            next_gen = np.array(next_gen)
+            problem.set_population(next_gen)
+            next_gen = []
+            currentBest = problem.best_child()
+            
             for i in range(pop_size):
                 # Select parents
                 fly = problem.get_population()[i]
                 if not np.array_equal(fly, currentBest):
-                    v1(currentBest, fly)
+                    fly = v3(currentBest, fly, V_r)
                 next_gen.append(fly)
 
         next_gen = np.array(next_gen)
@@ -246,7 +262,6 @@ class TravellingSalesDirected(mlrose.fitness.TravellingSales):
         self.distances = distances
         self.path_list = path_list
         self.dist_list = dist_list
-        print(self.path_list)
 
     def evaluate(self, state):
         """Evaluate the fitness of a state vector.
@@ -294,7 +309,6 @@ class TravellingSalesDirected(mlrose.fitness.TravellingSales):
                 if path in self.path_list:
                     fitness += self.dist_list[self.path_list.index(path)]
                 else:
-                    print(path)
                     fitness += np.inf
 
         # Calculate length of final leg
@@ -322,6 +336,7 @@ class Warehouse(ABC):
         self.nRows = nRows
         self.lotsPerRow = lotsPerRow
         self.paths = []
+        self.iterations = 0
 
     def Block(self):
         board = np.zeros((3*self.nRows,self.lotsPerRow+2))
@@ -339,10 +354,9 @@ class Warehouse(ABC):
 
     def createGraph(self, nLots=5):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        rng = np.random.RandomState(2)
         for _ in range(nLots):
-            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow))
-            #while randomLocation in randomPositions:
-            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            randomLocation = (rng.randint(0,2*self.nRows),rng.randint(1,self.lotsPerRow))
             self.randomPositions.append(randomLocation)
 
         nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
@@ -425,33 +439,132 @@ class Warehouse(ABC):
 
         return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
 
-    def solve(self, count=22):
-        self.createGraph(nLots=count)
-        mDist = self.findShortestPath(count)
+    def init_problem(self, count=22):
+        if self.iterations == 0:
+            self.createGraph(nLots=count)
+            self.mDist = self.findShortestPath(count)
+
+        self.iterations += 1
         
-        #fitness_dists = mlrose.TravellingSales(distances = mDist)
-        problem_fit = mlrose.TSPOpt(length = count+1, distances = mDist, # fitness_fn = fitness_dists,
-                                    maximize=False)
+        problem_fit = mlrose.TSPOpt(length = count+1, distances = self.mDist, maximize=False)
+        return problem_fit
+    
+    def solve(self, count=22):
+        problem_fit = self.init_problem(count)
+        return foa(problem_fit, pop_size=200, V_r=0.4, NN=10)
+    
+    def solve_ga(self, count=22):
+        problem_fit = self.init_problem(count)
+        return mlrose.genetic_alg(problem_fit, mutation_prob = 0.2,
+                                              max_attempts = 100)
+    
+    def solve_sa(self, count=22):
+        problem_fit = self.init_problem(count)
+        return mlrose.simulated_annealing(problem_fit)
+    
+    def sshape(self, count=22):
+        if self.iterations == 0:
+            self.createGraph(nLots=count)
+            self.mDist = self.findShortestPath(count)
 
-        best_state, best_fitness = foa(problem_fit, random_state = 2, max_attempts = 20)
+        self.iterations += 1
 
-        print('The best state found is: ', best_state)
-        print('The fitness at the best state is: ', best_fitness)
-        #self.plot(best_state)
-        return best_state
+        pos=nx.get_node_attributes(self.G,'pos')
 
+        dirUp = True
+        best_state = []
+        best_fitness = 0
+        lotsPerRow = {}
+        for i in range(count+1):
+            if pos[i][0] not in lotsPerRow:
+                lotsPerRow[pos[i][0]] = [i]
+            else:
+                lotsPerRow[pos[i][0]].append(i)
+
+        last_row = 0
+        for i in range(self.nRows):
+            if i in lotsPerRow:
+                best_fitness += (i - last_row) * 3
+                last_row = i
+                if dirUp:
+                    best_state = best_state + lotsPerRow[i]
+                else:
+                    best_state = best_state + lotsPerRow[i][::-1]
+                
+                dirUp = not dirUp
+                best_fitness += self.lotsPerRow + 1
+        if not dirUp:
+            best_fitness += self.lotsPerRow + 1
+        best_fitness += last_row * 3
+        
+        return best_state, best_fitness
+
+    def midpoint(self, count=22):
+        if self.iterations == 0:
+            self.createGraph(nLots=count)
+            self.mDist = self.findShortestPath(count)
+
+        self.iterations += 1
+
+        pos=nx.get_node_attributes(self.G,'pos')
+
+        best_state = []
+        best_fitness = 0
+        lotsPerRowFront = {}
+        lotsPerRowBack = {}
+        for i in range(count+1):
+            key = pos[i][0]
+            y = pos[i][1]
+            if y > self.lotsPerRow/2 and key not in lotsPerRowBack:
+                lotsPerRowBack[key] = [i]
+            elif y <= self.lotsPerRow/2 and key not in lotsPerRowFront:
+                lotsPerRowFront[key] = [i]
+            elif y > self.lotsPerRow/2:
+                lotsPerRowBack[key].append(i)
+            else:
+                lotsPerRowFront[key].append(i)
+
+        last_row = 0
+        mymax = max(lotsPerRowFront.keys())
+        for i in range(self.nRows):
+            if i in lotsPerRowFront:
+                best_fitness += (i - last_row) * 3
+                last_row = i
+                best_state = best_state + lotsPerRowFront[i]
+                
+                if i == mymax:
+                    best_fitness += self.lotsPerRow + 1
+                else:
+                    best_fitness += 2 * pos[lotsPerRowFront[i][-1]][1]
+
+        mymin = min(lotsPerRowBack.keys())
+        for i in range(self.nRows,0,-1):
+            if i in lotsPerRowBack:
+                best_fitness += abs(i - last_row) * 3
+                last_row = i
+                best_state = best_state + lotsPerRowBack[i]
+                
+                if i == mymin:
+                    best_fitness += self.lotsPerRow + 1
+                else:
+                    best_fitness += 2 * pos[lotsPerRowBack[i][0]][1]
+                
+        best_fitness += last_row * 3
+        
+        return best_state, best_fitness
+    
     def plot(self, best_state):
         myedgelist, route = self.edgeListFromState(best_state)
         B = self.Block()
         self.addTargetsToBlock(B)
         pos=nx.get_node_attributes(self.G,'pos')
-        plt.subplot(121)
-        nx.draw(self.G, pos, with_labels=True, font_weight='bold')
-        plt.subplot(122)
+        #plt.subplot(121)
+        #nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        #plt.subplot(122)
         nx.draw(self.G, pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
-        plt.figure()
-        plt.imshow(B)
-        plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
+        #plt.figure()
+        #plt.imshow(B)
+        #plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
         plt.show()
 
 class WarehouseOneDirection(Warehouse):
@@ -461,10 +574,9 @@ class WarehouseOneDirection(Warehouse):
 
     def createGraph(self, nLots=5):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        rng = np.random.RandomState(2)
         for _ in range(nLots):
-            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow))
-            #while randomLocation in randomPositions:
-            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            randomLocation = (rng.randint(0,2*self.nRows),rng.randint(1,self.lotsPerRow))
             self.randomPositions.append(randomLocation)
 
         nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
@@ -533,20 +645,16 @@ class WarehouseOneDirection(Warehouse):
 
         return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
 
-    def solve(self, count=22):
-        self.createGraph(nLots=count)
-        mDist = self.findShortestPath(count)
+    def init_problem(self, count=22):
+        if self.iterations == 0:
+            self.createGraph(nLots=count)
+            self.mDist = self.findShortestPath(count)
+
+        self.iterations += 1
         
-        #fitness_dists = mlrose.TravellingSales(distances = mDist)
-        problem_fit = mlrose.TSPOpt(length = count+1, distances = mDist, fitness_fn = TravellingSalesDirected(distances=mDist),
-                                    maximize=False)
-
-        best_state, best_fitness = foa(problem_fit, random_state = 2, max_attempts = 20)
-
-        print('The best state found is: ', best_state)
-        print('The fitness at the best state is: ', best_fitness)
-        #self.plot(best_state)
-        return best_state
+        problem_fit = mlrose.TSPOpt(length = count+1, distances = self.mDist,  maximize=False,
+                                    fitness_fn = TravellingSalesDirected(distances=self.mDist))
+        return problem_fit
 
 class WarehouseWithAisles(Warehouse):
     def __init__(self, nRows=10, lotsPerRow=10,aisles=[5]):
@@ -566,10 +674,9 @@ class WarehouseWithAisles(Warehouse):
 
     def createGraph(self, nLots=5):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
+        rng = np.random.RandomState(2)
         for _ in range(nLots):
-            randomLocation = (np.random.randint(0,2*self.nRows),np.random.randint(1,self.lotsPerRow-len(self.aisles)))
-            #while randomLocation in randomPositions:
-            #    randomLocation = (np.random.randint(0,2*nRows),np.random.randint(1,lotsPerRow))
+            randomLocation = (rng.randint(0,2*self.nRows),rng.randint(1,self.lotsPerRow-len(self.aisles)))
             self.randomPositions.append(randomLocation)
 
         nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]
@@ -638,8 +745,46 @@ class WarehouseWithAisles(Warehouse):
         nx.draw(self.G, pos, with_labels=True, font_weight='bold')
         plt.show()
 
+def simulate(fn, n, debug=False, **kwargs):
+    """Simulate a function call n times and return the average time."""
+    times = []
+    fitnesses = []
+    best_state = []
+    best_fitness = np.inf
 
-np.random.seed(1)
-warehouse = WarehouseWithAisles()
-best_state = warehouse.solve(count=5)
-warehouse.plot(best_state)
+    for _ in range(n):
+        start = time.time()
+        state, fitness = fn(**kwargs)
+        if debug:
+            print('The best state found is: ', state)
+            print('The fitness at the best state is: ', fitness)
+        end = time.time()
+        times.append(end - start)
+        fitnesses.append(fitness)
+        if fitness < best_fitness:
+            best_state = state
+            best_fitness = fitness
+
+    print("Fitness: ", np.mean(fitnesses), "+/-", np.std(fitnesses))
+    print("Time: ", np.mean(times), "+/-", np.std(times))
+    return best_state, best_fitness
+
+warehouse = WarehouseOneDirection(20,50)
+
+functions = [warehouse.solve, warehouse.solve_ga, warehouse.solve_sa]
+
+'''
+for fn in [warehouse.midpoint, warehouse.sshape]:
+    print(fn.__name__)
+    best_state, best_fitness = simulate(fn, 1, count=20)
+
+    print("Best fitness: ", best_fitness)
+    #warehouse.plot(best_state)
+'''
+
+for fn in functions:
+    print(fn.__name__)
+    best_state, best_fitness = simulate(fn, 5, count=20)
+
+    print("Best fitness: ", best_fitness)
+    warehouse.plot(best_state)
