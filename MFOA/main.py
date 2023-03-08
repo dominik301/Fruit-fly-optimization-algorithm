@@ -449,9 +449,9 @@ class Warehouse(ABC):
         problem_fit = mlrose.TSPOpt(length = count+1, distances = self.mDist, maximize=False)
         return problem_fit
     
-    def solve(self, count=22):
+    def solve(self, count=22, pop_size=200, V_r=0.4, NN=10):
         problem_fit = self.init_problem(count)
-        return foa(problem_fit, pop_size=200, V_r=0.4, NN=10)
+        return foa(problem_fit, pop_size=pop_size, V_r=V_r, NN=NN)
     
     def solve_ga(self, count=22):
         problem_fit = self.init_problem(count)
@@ -553,18 +553,26 @@ class Warehouse(ABC):
         
         return best_state, best_fitness
     
-    def plot(self, best_state):
+    def plot_problem(self):
+        pos=nx.get_node_attributes(self.G,'pos')
+        nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        plt.show()
+
+    def plot(self, best_state, both=False):
         myedgelist, route = self.edgeListFromState(best_state)
+        newedgelist = []
+        for val in myedgelist:
+            if val[0] != val[1]:
+                newedgelist.append(val)
+        myedgelist = newedgelist
         B = self.Block()
         self.addTargetsToBlock(B)
         pos=nx.get_node_attributes(self.G,'pos')
-        #plt.subplot(121)
-        #nx.draw(self.G, pos, with_labels=True, font_weight='bold')
-        #plt.subplot(122)
-        nx.draw(self.G, pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
-        #plt.figure()
-        #plt.imshow(B)
-        #plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
+        nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
+        if both:
+            plt.figure()
+            plt.imshow(B)
+            plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
         plt.show()
 
 class WarehouseOneDirection(Warehouse):
@@ -740,17 +748,71 @@ class WarehouseWithAisles(Warehouse):
 
         self.G.add_edges_from(edges)
 
+class Rack(ABC):
+    def __init__(self, nRows=10, lotsPerRow=10):
+        self.G = nx.Graph()
+        self.randomPositions = []
+        self.nRows = nRows
+        self.lotsPerRow = lotsPerRow
+        self.iterations = 0
+
+    def createGraph(self, nLots=5):
+        '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''    
+        nNodes = 1
+        self.G.add_node(0, pos=(0,0))
+        self.randomPositions.append((0,0))
+        rng = np.random.RandomState(2)
+        for _ in range(nLots):
+            randomLocation = (rng.randint(0,self.nRows),rng.randint(0,self.lotsPerRow))
+            self.randomPositions.append(randomLocation)
+            self.G.add_node(nNodes, pos=randomLocation)
+            nNodes += 1
+
+    def edgeListFromState(self, state):
+        return [(state[i],state[(i+1)%len(state)]) for i in range(len(state))] , state
+
+    def init_problem(self, count=22):
+        if self.iterations == 0:
+            self.createGraph(nLots=count)
+
+        self.iterations += 1
+        
+        problem_fit = mlrose.TSPOpt(length = count+1, coords= self.randomPositions, maximize=False)
+        return problem_fit
+    
+    def solve(self, count=22):
+        problem_fit = self.init_problem(count)
+        return foa(problem_fit, pop_size=200, V_r=0.4, NN=10)
+    
+    def solve_ga(self, count=22):
+        problem_fit = self.init_problem(count)
+        return mlrose.genetic_alg(problem_fit, mutation_prob = 0.2,
+                                              max_attempts = 100)
+    
+    def solve_sa(self, count=22):
+        problem_fit = self.init_problem(count)
+        return mlrose.simulated_annealing(problem_fit)
+    
+    def plot(self, best_state):
+        myedgelist, _ = self.edgeListFromState(best_state)
+        
         pos=nx.get_node_attributes(self.G,'pos')
-        plt.subplot(121)
+        
         nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        plt.figure()
+        nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
         plt.show()
 
-def simulate(fn, n, debug=False, **kwargs):
+results = {}
+def simulate(fn, n, debug=False, name=None, **kwargs):
     """Simulate a function call n times and return the average time."""
     times = []
     fitnesses = []
     best_state = []
     best_fitness = np.inf
+    global results
+    if name == None:
+        name = fn.__name__
 
     for _ in range(n):
         start = time.time()
@@ -767,24 +829,108 @@ def simulate(fn, n, debug=False, **kwargs):
 
     print("Fitness: ", np.mean(fitnesses), "+/-", np.std(fitnesses))
     print("Time: ", np.mean(times), "+/-", np.std(times))
+    results[name] = [np.mean(fitnesses), np.std(fitnesses), np.mean(times), np.std(times)]
     return best_state, best_fitness
 
-warehouse = WarehouseOneDirection(20,50)
+TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING"]
 
-functions = [warehouse.solve, warehouse.solve_ga, warehouse.solve_sa]
+def plotStatistics(rows):
+    global results
+    x = rows
+    y = [results[entry][0] for entry in rows]
+    err = [results[entry][1] for entry in rows]
+    times = [results[entry][2] for entry in rows]
+    timeerr = [results[entry][3] for entry in rows]
+    plt.subplot(121)
+    
+    # Plot scatter here
+    plt.bar(x, y)
+    plt.errorbar(x, y, yerr=err, fmt="o", color="r")
 
-'''
-for fn in [warehouse.midpoint, warehouse.sshape]:
-    print(fn.__name__)
-    best_state, best_fitness = simulate(fn, 1, count=20)
+    plt.subplot(122)
 
-    print("Best fitness: ", best_fitness)
-    #warehouse.plot(best_state)
-'''
+    plt.bar(x, times)
+    plt.errorbar(x, times, yerr=timeerr, fmt="o", color="r")
+    plt.show()
 
-for fn in functions:
-    print(fn.__name__)
-    best_state, best_fitness = simulate(fn, 5, count=20)
+if __name__ == "__main__":
+    testCase = "WAREHOUSE_ONE_DIRECTION"
 
-    print("Best fitness: ", best_fitness)
-    warehouse.plot(best_state)
+    if testCase == "RACK":
+        warehouse = Rack(10,30)
+        count = 10
+    elif testCase == "WAREHOUSE":
+        warehouse = Warehouse(20,50)
+        count = 20
+    elif testCase == "WAREHOUSE_WITH_AISLES":
+        warehouse = WarehouseWithAisles(10,30, aisles=[10,20])
+        count = 20
+    elif testCase == "WAREHOUSE_ONE_DIRECTION":
+        warehouse = WarehouseOneDirection(20,50)
+        count = 20
+    elif testCase == "HYPERPARAMETER_TUNING":
+        warehouse = Warehouse(20,50)
+        count = 20
+
+    functions = [warehouse.solve, warehouse.solve_ga, warehouse.solve_sa]
+
+    '''
+    for fn in [warehouse.midpoint, warehouse.sshape]:
+        print(fn.__name__)
+        best_state, best_fitness = simulate(fn, 1, count=count)
+
+        print("Best fitness: ", best_fitness)
+        #warehouse.plot(best_state)
+    '''
+    if not testCase == "HYPERPARAMETER_TUNING":
+        for fn in functions:
+            print(fn.__name__)
+            
+            best_state, best_fitness = simulate(fn, 5, count=count)
+
+            print("Best fitness: ", best_fitness)
+            warehouse.plot(best_state)
+
+        ### Plotting
+        x = ['FOA', 'GA', 'SA']
+        y = [results['solve'][0], results['solve_ga'][0], results['solve_sa'][0]]
+        err = [results['solve'][1], results['solve_ga'][1], results['solve_sa'][1]]
+
+        # Plot scatter here
+        plt.bar(x, y)
+        plt.errorbar(x, y, yerr=err, fmt="o", color="r")
+
+        plt.figure()
+
+        times = [results['solve'][2], results['solve_ga'][2], results['solve_sa'][2]]
+        timeerr = [results['solve'][3], results['solve_ga'][3], results['solve_sa'][3]]
+
+        plt.bar(x, times)
+        plt.errorbar(x, times, yerr=timeerr, fmt="o", color="r")
+        plt.show()
+    else:
+        for pop_size in [100, 300]:
+            print("Pop size: ", pop_size)
+            best_state, best_fitness = simulate(warehouse.solve, 5, name=str(pop_size), count=count, pop_size=pop_size)
+
+            print("Best fitness: ", best_fitness)
+
+        plotStatistics(['100', '300'])
+        
+        for V_r in [0.1, 0.5]:
+            print("V_r: ", V_r)
+            best_state, best_fitness = simulate(warehouse.solve, 5, name=str(V_r), count=count, V_r=V_r)
+
+            print("Best fitness: ", best_fitness)
+        
+        plotStatistics(['0.1', '0.5'])
+        
+        for NN in [5, 15]:
+            print("NN: ", NN)
+            best_state, best_fitness = simulate(warehouse.solve, 5, name=str(NN), count=count, NN=NN)
+
+            print("Best fitness: ", best_fitness)
+        
+        plotStatistics(['5', '15'])
+        
+    
