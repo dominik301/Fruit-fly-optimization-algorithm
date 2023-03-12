@@ -33,9 +33,9 @@ class AbstractWarehouse(ABC):
         problem_fit = self.init_problem(count)
         return FOA.foa(problem_fit, pop_size=pop_size, V_r=V_r, NN=NN, visionFn=visionFn)
     
-    def solve_efoa(self, count=22, pop_size=200):
+    def solve_efoa(self, count=22, pop_size=200, curve=False):
         problem_fit = self.init_problem(count)
-        return EFOA.efoa(problem_fit, pop_size=pop_size)
+        return EFOA.efoa(problem_fit, pop_size=pop_size, curve=curve)
     
     def solve_ga(self, count=22):
         problem_fit = self.init_problem(count)
@@ -496,3 +496,20 @@ class Rack(AbstractWarehouse):
         plt.figure()
         nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
         plt.show()
+
+if __name__ == "__main__":
+    warehouse = Rack(10,30)
+    _,_,curve = warehouse.solve_efoa(10,curve=True)
+    plt.plot(curve)
+    plt.show()
+    #best_state, _ = warehouse.solve(20)
+    #warehouse.plot(best_state,both=True)
+
+    """
+    x = np.array([0.01*i for i in range(1,501)])
+    c = 1
+    mu = 0
+    y = np.array([np.sqrt(c/2/np.pi)*np.exp(-c/(2*(i-mu)))/(i-mu)**(3/2) for i in x])
+
+    plt.plot(x,y)
+    plt.show()"""

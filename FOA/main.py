@@ -119,7 +119,7 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(pop_size) for pop_size in vec_pop_size])
 
 if __name__ == "__main__":
-    testCase = "VISION"
+    testCase = "HYPERPARAMETER_TUNING"
 
     if testCase == "RACK":
         solver = Solver(Rack, nRows=10, lotsPerRow=30, count=10)
@@ -134,10 +134,10 @@ if __name__ == "__main__":
     elif testCase == "VISION":
         solver = Solver(Warehouse, nRows=20, lotsPerRow=50, count=20)
 
-    if not testCase == "HYPERPARAMETER_TUNING" and not testCase == "VISION":
-        functions = [solver.problemType.solve, solver.problemType.solve_efoa, solver.problemType.solve_ga, solver.problemType.solve_sa] #, solver.problemType.midpoint, solver.problemType.sshape]
+    if testCase == "WAREHOUSE":
+        functions = [solver.problemType.solve_efoa, solver.problemType.solve, solver.problemType.solve_ga, solver.problemType.solve_sa, solver.problemType.midpoint, solver.problemType.sshape]
         solver.solve_for_fn(functions, n=5)
-        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['FOA', 'EFOA', 'GA', 'SA'])#, 'Mittelpunkt', 'S-Form'])
+        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['EFOA', 'FOA', 'GA', 'SA', 'Mittelpunkt', 'S-Form'])
     elif testCase == "VISION":
         V = [FOA.v1, FOA.v3]
         for v in V:
@@ -145,7 +145,11 @@ if __name__ == "__main__":
             print("Best fitness: ", best_fitness)
             solver.problemType.plot(best_state)
         solver.plotStatistics([v.__name__ for v in V], x_axis=['V1', 'V3'])
-    else:
+    elif testCase == "HYPERPARAMETER_TUNING":
         tuner.tune_efoa()
+    else:
+        functions = [solver.problemType.solve_efoa, solver.problemType.solve, solver.problemType.solve_ga, solver.problemType.solve_sa]
+        solver.solve_for_fn(functions, n=5)
+        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['EFOA', 'FOA', 'GA', 'SA'])
         
     

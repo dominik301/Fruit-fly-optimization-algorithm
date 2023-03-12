@@ -183,7 +183,7 @@ class FOA:
         return best_state, best_fitness
 
 class EFOA:
-    def reverseOperatorCoords(fly:np.array, coords):
+    def reverseOperatorCoords(fly:np.array, coords, G=None, debug=False):
         i = np.random.randint(0, len(fly))
         posList = coords.copy()
         posList.remove(coords[i])
@@ -193,6 +193,22 @@ class EFOA:
             j += 1
         idx1 = np.where(fly==i)[0][0]
         idx2 = np.where(fly==j)[0][0]
+        if debug:
+            print("i: ", i)
+            print("j: ", j)
+            print("fly: ", fly)
+            newfly = EFOA.TR(fly, idx1, idx2)
+            pos=nx.get_node_attributes(G,'pos')
+            ax1 = plt.subplot(121)
+            myedgelist = [(fly[i],fly[(i+1)%len(fly)]) for i in range(len(fly))]
+            nx.draw(G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
+            ax2 = plt.subplot(122)
+            myedgelist = [(newfly[i],newfly[(i+1)%len(newfly)]) for i in range(len(newfly))]
+            nx.draw(G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
+            ax1.title.set_text('F')
+            ax2.title.set_text("F'")
+            plt.show()
+            
         return EFOA.TR(fly, idx1, idx2)
     
     def reverseOperatorDists(fly:np.array, dists):
@@ -339,13 +355,13 @@ class EFOA:
         attempts = 0
         iters = 0
 
+        currentBest = problem.best_child()
+
         while (attempts < max_attempts) and (iters < max_iters):
             iters += 1
 
             # Create next generation of population
             next_gen = []
-
-            currentBest = problem.best_child()
 
             for i in range(pop_size):
                 # Select parents
@@ -356,21 +372,26 @@ class EFOA:
                     newfly = EFOA.reverseOperatorCoords(fly, coords)
                 else:
                     newfly = EFOA.reverseOperatorDists(fly, distances)
-                next_gen.append(newfly)
-            next_gen = np.array(next_gen)
-            problem.set_population(next_gen)
-            next_gen = []
-            currentBest = problem.best_child()
-            for i in range(pop_size):
-                # Select parents
-                fly = problem.get_population()[i]
-                if (fly != currentBest).all():
-                    newfly = EFOA.multiplicationOperator(newfly, currentBest, problem)
+                if (problem.eval_fitness(newfly) > problem.eval_fitness(fly)):
                     next_gen.append(newfly)
                 else:
                     next_gen.append(fly)
             next_gen = np.array(next_gen)
-            sorted_next = sorted(next_gen, key=problem.eval_fitness)
+            problem.set_population(next_gen)
+            next_gen = []
+            best = problem.best_child()
+            if problem.eval_fitness(best) > problem.eval_fitness(currentBest):
+                currentBest = best
+            for i in range(pop_size):
+                # Select parents
+                fly = problem.get_population()[i]
+                if (fly != currentBest).all():
+                    newfly = EFOA.multiplicationOperator(fly, currentBest, problem)
+                    next_gen.append(newfly)
+                else:
+                    next_gen.append(fly)
+            next_gen = np.array(next_gen)
+            sorted_next = sorted(next_gen, key=problem.eval_fitness,reverse=True)
             last = round(0.9 * pop_size) + 1
             next_gen = sorted_next[:last]
             next_gen = np.concatenate((next_gen, [problem.random() for _ in range(pop_size - len(next_gen))]))
@@ -379,6 +400,9 @@ class EFOA:
 
             next_state = problem.best_child()
             next_fitness = problem.eval_fitness(next_state)
+
+            if next_fitness > problem.eval_fitness(currentBest):
+                currentBest = next_state
 
             # If best child is an improvement,
             # move to that state and reset attempts counter
