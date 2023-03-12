@@ -29,9 +29,9 @@ class AbstractWarehouse(ABC):
     def init_problem(self, count=22):
         raise NotImplementedError
     
-    def solve(self, count=22, pop_size=200, V_r=0.4, NN=10):
+    def solve(self, count=22, pop_size=200, V_r=0.4, NN=10, visionFn=None):
         problem_fit = self.init_problem(count)
-        return FOA.foa(problem_fit, pop_size=pop_size, V_r=V_r, NN=NN)
+        return FOA.foa(problem_fit, pop_size=pop_size, V_r=V_r, NN=NN, visionFn=visionFn)
     
     def solve_efoa(self, count=22, pop_size=200):
         problem_fit = self.init_problem(count)
@@ -256,9 +256,14 @@ class Warehouse(AbstractWarehouse):
         
         return best_state, best_fitness
     
-    def plot_problem(self):
+    def plot_problem(self, both=False):
         pos=nx.get_node_attributes(self.G,'pos')
         nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        if both:
+            B = self.Block()
+            self.addTargetsToBlock(B)
+            plt.figure()
+            plt.imshow(B)
         plt.show()
 
     def plot(self, best_state, both=False):
@@ -387,7 +392,10 @@ class WarehouseWithAisles(Warehouse):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
         rng = np.random.RandomState(2)
         for _ in range(nLots):
-            randomLocation = (rng.randint(0,2*self.nRows),rng.randint(1,self.lotsPerRow-len(self.aisles)))
+            while True:
+                randomLocation = (rng.randint(0,2*self.nRows),rng.randint(1,self.lotsPerRow-len(self.aisles)))
+                if randomLocation[1] not in self.aisles:
+                    break
             self.randomPositions.append(randomLocation)
 
         nodePositions = [(floor(x/2),y) for x,y in self.randomPositions]

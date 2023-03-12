@@ -57,7 +57,7 @@ class FOA:
 
     def foa(problem, smellFn=None, visionFn=None, pop_size=200, max_attempts=10,
                     max_iters=2500, curve=False, random_state=None, V_r=0.4, NN=10):
-        """Use a standard genetic algorithm to find the optimum for a given
+        """Use Fruit Fly Optimization Algorithm to find the optimum for a given
         optimization problem.
         Parameters
         ----------
@@ -67,9 +67,6 @@ class FOA:
             :code:`TSPOpt()`.
         pop_size: int, default: 200
             Size of population to be used in genetic algorithm.
-        mutation_prob: float, default: 0.1
-            Probability of a mutation at each element of the state vector
-            during reproduction, expressed as a value between 0 and 1.
         max_attempts: int, default: 10
             Maximum number of attempts to find a better state at each step.
         max_iters: int, default: np.inf
@@ -92,10 +89,6 @@ class FOA:
             Numpy array of arrays containing the fitness of the entire population
             at every iteration.
             Only returned if input argument :code:`curve` is :code:`True`.
-        References
-        ----------
-        Russell, S. and P. Norvig (2010). *Artificial Intelligence: A Modern
-        Approach*, 3rd edition. Prentice Hall, New Jersey, USA.
         """
         if pop_size < 0:
             raise Exception("""pop_size must be a positive integer.""")
@@ -284,7 +277,7 @@ class EFOA:
 
     def efoa(problem, pop_size=200, max_attempts=10,
                     max_iters=2500, curve=False, random_state=None):
-        """Use a standard genetic algorithm to find the optimum for a given
+        """Use Elimination-based Fruit Fly Optimization Alogithm to find the optimum for a given
         optimization problem.
         Parameters
         ----------
@@ -294,9 +287,6 @@ class EFOA:
             :code:`TSPOpt()`.
         pop_size: int, default: 200
             Size of population to be used in genetic algorithm.
-        mutation_prob: float, default: 0.1
-            Probability of a mutation at each element of the state vector
-            during reproduction, expressed as a value between 0 and 1.
         max_attempts: int, default: 10
             Maximum number of attempts to find a better state at each step.
         max_iters: int, default: np.inf
@@ -319,10 +309,6 @@ class EFOA:
             Numpy array of arrays containing the fitness of the entire population
             at every iteration.
             Only returned if input argument :code:`curve` is :code:`True`.
-        References
-        ----------
-        Russell, S. and P. Norvig (2010). *Artificial Intelligence: A Modern
-        Approach*, 3rd edition. Prentice Hall, New Jersey, USA.
         """
         if pop_size < 0:
             raise Exception("""pop_size must be a positive integer.""")

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import time
 from problemTypes import *
 
-TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING"]
+TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING", "VISION"]
 
 class Solver:
     def __init__(self, problemType=None, nRows=10, lotsPerRow=10, aisles=[5], count=10):
@@ -59,7 +59,7 @@ class Solver:
             print("Best fitness: ", best_fitness)
             self.problemType.plot(best_state)
 
-    def plotStatistics(self, rows, x_axis:None):
+    def plotStatistics(self, rows, x_axis=None):
         if x_axis == None:
             x = rows
         else:
@@ -109,8 +109,17 @@ class HyperParameterTuning(Solver):
         
         self.plotStatistics([str(NN) for NN in vec_NN])
 
+    def tune_efoa(self, n=5, vec_pop_size=[100,300]):
+        for pop_size in vec_pop_size:
+            print("Pop size: ", pop_size)
+            _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(pop_size), pop_size=pop_size)
+
+            print("Best fitness: ", best_fitness)
+
+        self.plotStatistics([str(pop_size) for pop_size in vec_pop_size])
+
 if __name__ == "__main__":
-    testCase = "WAREHOUSE"
+    testCase = "VISION"
 
     if testCase == "RACK":
         solver = Solver(Rack, nRows=10, lotsPerRow=30, count=10)
@@ -122,17 +131,21 @@ if __name__ == "__main__":
         solver = Solver(WarehouseOneDirection, nRows=20, lotsPerRow=50, count=20)
     elif testCase == "HYPERPARAMETER_TUNING":
         tuner = HyperParameterTuning(nRows=20, lotsPerRow=50, count=20)
-
-    if not testCase == "HYPERPARAMETER_TUNING" and not testCase == "EFOA":
-        functions = [solver.problemType.solve, solver.problemType.solve_efoa, solver.problemType.solve_ga, solver.problemType.solve_sa, solver.problemType.midpoint, solver.problemType.sshape]
-        solver.solve_for_fn(functions, n=5)
-        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['FOA', 'EFOA', 'GA', 'SA', 'Mittelpunkt', 'S-Form'])
-    elif testCase == "EFOA":
+    elif testCase == "VISION":
         solver = Solver(Warehouse, nRows=20, lotsPerRow=50, count=20)
-        functions = [solver.problemType.solve_efoa]
+
+    if not testCase == "HYPERPARAMETER_TUNING" and not testCase == "VISION":
+        functions = [solver.problemType.solve, solver.problemType.solve_efoa, solver.problemType.solve_ga, solver.problemType.solve_sa] #, solver.problemType.midpoint, solver.problemType.sshape]
         solver.solve_for_fn(functions, n=5)
-        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['EFOA'])
+        solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['FOA', 'EFOA', 'GA', 'SA'])#, 'Mittelpunkt', 'S-Form'])
+    elif testCase == "VISION":
+        V = [FOA.v1, FOA.v3]
+        for v in V:
+            best_state, best_fitness = solver.simulate(solver.problemType.solve, n=5,name=v.__name__, visionFn=v)
+            print("Best fitness: ", best_fitness)
+            solver.problemType.plot(best_state)
+        solver.plotStatistics([v.__name__ for v in V], x_axis=['V1', 'V3'])
     else:
-        tuner.tune()
+        tuner.tune_efoa()
         
     
