@@ -116,7 +116,7 @@ class TravellingSales(mlrose.TravellingSales):
             two consecutive nodes on the tour is not possible.
         """
 
-        if self.is_coords and len(state) != len(self.coords):
+        '''if self.is_coords and len(state) != len(self.coords):
             raise Exception("""state must have the same length as coords.""")
 
         if not len(state) == len(set(state)):
@@ -128,7 +128,7 @@ class TravellingSales(mlrose.TravellingSales):
 
         if max(state) >= len(state):
             raise Exception("""All elements of state must be less than"""
-                            + """ len(state).""")
+                            + """ len(state).""")'''
 
         fitness = 0
 
@@ -143,10 +143,7 @@ class TravellingSales(mlrose.TravellingSales):
             else:
                 path = (min(node1, node2), max(node1, node2))
 
-                if path in self.path_list:
-                    fitness += self.path_lengths[path]
-                else:
-                    fitness += np.inf
+                fitness += self.path_lengths[path]
 
         return fitness
 
@@ -227,7 +224,7 @@ class TravellingSalesDirected(TravellingSales):
             two consecutive nodes on the tour is not possible.
         """
 
-        if self.is_coords and len(state) != len(self.coords):
+        '''if self.is_coords and len(state) != len(self.coords):
             raise Exception("""state must have the same length as coords.""")
 
         if not len(state) == len(set(state)):
@@ -239,7 +236,7 @@ class TravellingSalesDirected(TravellingSales):
 
         if max(state) >= len(state):
             raise Exception("""All elements of state must be less than"""
-                            + """ len(state).""")
+                            + """ len(state).""")'''
 
         fitness = 0
 
@@ -254,10 +251,7 @@ class TravellingSalesDirected(TravellingSales):
             else:
                 path = (node1, node2)
                 
-                if path in self.path_list:
-                    fitness += self.path_lengths[path]
-                else:
-                    fitness += np.inf
+                fitness += self.path_lengths[path]
 
         return fitness
 

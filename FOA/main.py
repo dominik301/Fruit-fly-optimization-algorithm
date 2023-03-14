@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import time
 from problemTypes import *
 import datetime
+import pandas as pd
 
 TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING", "VISION"]
 FUNCTIONS = {"solve_efoa": "EFOA", "solve": "FOA", "midpoint": "Mittelpunkt", "sshape": "S-Form", "solve_ga": "GA", "solve_sa": "SA"}
@@ -43,7 +44,7 @@ class Solver:
         if debug:
             print("Fitness: ", np.mean(fitnesses), "+/-", np.std(fitnesses))
             print("Time: ", np.mean(times), "+/-", np.std(times))
-        self.results[name] = [np.mean(fitnesses), np.std(fitnesses), np.mean(times), np.std(times)]
+        self.results[name] = {"fitness": fitnesses, "time": times}
         return best_state, best_fitness
     
     def heuristics(self):
@@ -54,40 +55,45 @@ class Solver:
             print("Best fitness: ", best_fitness)
             self.problemType.plot(best_state)
 
-    def solve_for_fn(self, fn, n=5):
+    def solve_for_fn(self, functions, n=5):
         for fn in functions:
             print(fn.__name__)
             best_state, best_fitness = self.simulate(fn, n)
             print("Best fitness: ", best_fitness)
             self.problemType.plot(best_state, FUNCTIONS[fn.__name__] + ", Länge: " + str(best_fitness))
 
-    def plotStatistics(self, rows, x_axis=None, testCase="", show=True):
+    def plotStatistics(self, rows=None, x_axis=None, testCase="", show=True):
         if x_axis == None:
             x = rows
         else:
             x = x_axis
-        y = [self.results[entry][0] for entry in rows]
-        err = [self.results[entry][1] for entry in rows]
-        times = [self.results[entry][2] for entry in rows]
-        timeerr = [self.results[entry][3] for entry in rows]
-        plt.figure(figsize=(15,10))
+        plt.figure(figsize=(14,7))
         ax1 = plt.subplot(121)
         
-        # Plot scatter here
-        plt.bar(x, y)
-        plt.errorbar(x, y, yerr=err, fmt="o", color="r")
+        fitness = {}
+        times = {}
+        for key,value in self.results.items():
+            times[key] = value["time"]
+            fitness[key] = value["fitness"]
+        df = pd.DataFrame(fitness)
+        plt.boxplot(df)
+        plt.xticks(range(1, len(df.columns) + 1), x)
+        
         ax1.title.set_text('Fitness')
 
         ax2 = plt.subplot(122)
-
-        plt.bar(x, times)
-        plt.errorbar(x, times, yerr=timeerr, fmt="o", color="r")
+        
+        df = pd.DataFrame(times)
+        plt.boxplot(df)
+        plt.xticks(range(1, len(df.columns) + 1), x)
+        
         ax2.title.set_text('Zeit')
         if show:
             plt.show()
         else:
             name = testCase + str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) + ".png"
             plt.savefig(name)
+            plt.close()
 
 class HyperParameterTuning(Solver):
     def __init__(self,**kwargs):
@@ -101,6 +107,7 @@ class HyperParameterTuning(Solver):
             print("Best fitness: ", best_fitness)
 
         self.plotStatistics([str(pop_size) for pop_size in vec_pop_size], testCase="FOA Popsize")
+        self.results = {}
         
         for V_r in vec_V_r:
             print("V_r: ", V_r)
@@ -109,6 +116,7 @@ class HyperParameterTuning(Solver):
             print("Best fitness: ", best_fitness)
         
         self.plotStatistics([str(V_r) for V_r in vec_V_r], testCase="V_r")
+        self.results = {}
         
         for NN in vec_NN:
             print("NN: ", NN)
@@ -117,8 +125,9 @@ class HyperParameterTuning(Solver):
             print("Best fitness: ", best_fitness)
         
         self.plotStatistics([str(NN) for NN in vec_NN], testCase="NN")
+        self.results = {}
 
-    def tune_efoa(self, n=10, vec_pop_size=[100,300]):
+    def tune_efoa(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[10,100], vec_p=[0.05,0.1,0.2]):
         for pop_size in vec_pop_size:
             print("Pop size: ", pop_size)
             _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(pop_size), pop_size=pop_size)
@@ -126,6 +135,25 @@ class HyperParameterTuning(Solver):
             print("Best fitness: ", best_fitness)
 
         self.plotStatistics([str(pop_size) for pop_size in vec_pop_size], testCase="EFOA Popsize")
+        self.results = {}
+
+        for attempts in vec_attempts:
+            print("Attempts: ", attempts)
+            _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(attempts), max_attempts=attempts)
+
+            print("Best fitness: ", best_fitness)
+        
+        self.plotStatistics([str(attempts) for attempts in vec_attempts], testCase="EFOA Attempts")
+        self.results = {}
+
+        for p in vec_p:
+            print("p: ", p)
+            _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(p), p=p)
+
+            print("Best fitness: ", best_fitness)
+
+        self.plotStatistics([str(p) for p in vec_p], testCase="EFOA p")
+        self.results = {}
 
 if __name__ == "__main__":
     testCase = "HYPERPARAMETER_TUNING"

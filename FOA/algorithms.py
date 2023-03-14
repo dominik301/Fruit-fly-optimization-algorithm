@@ -5,7 +5,6 @@ from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 from operator import itemgetter
 from itertools import product, permutations
-from mip import Model, xsum, minimize, BINARY
 
 class FOA:
     def v1(bestSmell, fly, V_r=0.4, problem=None):
@@ -114,6 +113,7 @@ class FOA:
 
         if curve:
             fitness_curve = []
+            plt.axis()
 
         if smellFn is None:
             smellFn = FOA.s1
@@ -175,6 +175,8 @@ class FOA:
 
             if curve:
                 fitness_curve.append(problem.get_fitness())
+                plt.plot(fitness_curve)
+                plt.pause(0.0001)
 
         best_fitness = problem.get_maximize()*problem.get_fitness()
         best_state = problem.get_state()
@@ -304,7 +306,7 @@ class EFOA:
         return solutions[best]
 
     def efoa(problem, pop_size=200, max_attempts=10,
-                    max_iters=2500, curve=False, random_state=None):
+                    max_iters=2500, p=0.1, curve=False, random_state=None):
         """Use Elimination-based Fruit Fly Optimization Alogithm to find the optimum for a given
         optimization problem.
         Parameters
@@ -360,6 +362,7 @@ class EFOA:
 
         if curve:
             fitness_curve = []
+            plt.axis()
 
         # Initialize problem, population and attempts counter
         problem.reset()
@@ -404,7 +407,7 @@ class EFOA:
                     next_gen.append(fly)
             next_gen = np.array(next_gen)
             sorted_next = sorted(next_gen, key=problem.eval_fitness,reverse=True)
-            last = round(0.9 * pop_size) + 1
+            last = round((1-p) * pop_size) + 1
             next_gen = sorted_next[:last]
             next_gen = np.concatenate((next_gen, [problem.random() for _ in range(pop_size - len(next_gen))]))
             problem.set_population(next_gen)
@@ -427,6 +430,8 @@ class EFOA:
 
             if curve:
                 fitness_curve.append(problem.get_fitness())
+                plt.plot(fitness_curve)
+                plt.pause(0.0001)
 
         best_fitness = problem.get_maximize()*problem.get_fitness()
         best_state = problem.get_state()
@@ -465,6 +470,7 @@ class ExactSolver:
         return best_state, problem.get_maximize() * best_fitness
 
     def mip(problem):
+        from mip import Model, xsum, minimize, BINARY
 
         # number of nodes and list of vertices
         n, V = problem.length, set(range(problem.length))
