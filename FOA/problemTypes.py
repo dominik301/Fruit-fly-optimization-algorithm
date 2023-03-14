@@ -11,51 +11,25 @@ from abc import ABC
 from fitnessFunctions import *
 from algorithms import FOA, EFOA
 
-class FOAOpt(mlrose.DiscreteOpt):
+class FOAOpt(mlrose.TSPOpt):
     def __init__(self, length, fitness_fn=None, maximize=False, coords=None,
                  distances=None, roulette=False):
+        
         if (fitness_fn is None) and (coords is None) and (distances is None):
             raise Exception("""At least one of fitness_fn, coords and"""
                             + """ distances must be specified.""")
         elif fitness_fn is None:
             fitness_fn = TravellingSales(coords=coords, distances=distances)
 
-        super().__init__(length, fitness_fn, maximize,
-                             max_val=length)
+        super().__init__(length, fitness_fn, maximize)
 
-        if self.fitness_fn.get_prob_type() != 'tsp':
-            raise Exception("""fitness_fn must have problem type 'tsp'.""")
-
-        self.prob_type = 'tsp'
-        
-        self.probs = np.zeros((self.length, self.length), dtype=np.int8)
-        for val in self.fitness_fn.distances:
-            n1,n2,dist = val
-            self.probs[n1,n2] = 1/dist
-            self.probs[n2,n1] = 1/dist
+        if distances is not None:
+            self.probs = np.zeros((self.length, self.length), dtype=np.int8)
+            for val in self.fitness_fn.distances:
+                n1,n2,dist = val
+                self.probs[n1,n2] = 1/dist
+                self.probs[n2,n1] = 1/dist
         self.roulette = roulette
-
-    def adjust_probs(self, probs):
-        """Normalize a vector of probabilities so that the vector sums to 1.
-
-        Parameters
-        ----------
-        probs: array
-            Vector of probabilities that may or may not sum to 1.
-
-        Returns
-        -------
-        adj_probs: array
-            Vector of probabilities that sums to 1. Returns a zero vector if
-            sum(probs) = 0.
-        """
-        if np.sum(probs) == 0:
-            adj_probs = np.zeros(np.shape(probs))
-
-        else:
-            adj_probs = probs/np.sum(probs)
-
-        return adj_probs
 
     def random(self):
         """Generate single sample from probability density.

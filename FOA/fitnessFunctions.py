@@ -58,6 +58,7 @@ class TravellingSales(mlrose.TravellingSales):
 
     def __init__(self, coords=None, distances=None):
 
+        path_lengths = {}
         if coords is None and distances is None:
             raise Exception("""At least one of coords and distances must be"""
                             + """ specified.""")
@@ -89,7 +90,6 @@ class TravellingSales(mlrose.TravellingSales):
                                 + """ distances.""")
 
             path_list = list(zip(node1_list, node2_list))
-            path_lengths = {}
             for i in range(len(path_list)):
                 path_lengths[path_list[i]] = dist_list[i]
 
