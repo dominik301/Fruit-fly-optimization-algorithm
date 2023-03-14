@@ -9,7 +9,7 @@ import networkx as nx
 from operator import itemgetter
 from abc import ABC
 from fitnessFunctions import *
-from algorithms import FOA, EFOA
+from algorithms import FOA, EFOA, ExactSolver
 
 class FOAOpt(mlrose.TSPOpt):
     def __init__(self, length, fitness_fn=None, maximize=False, coords=None,
@@ -104,6 +104,10 @@ class AbstractWarehouse(ABC):
     def solve_ifoa(self, count=20, roulette=False, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
         return FOA.ifoa(problem_fit, **kwargs)
+    
+    def solve_mip(self, count=20):
+        problem_fit = self.init_problem(count)
+        return ExactSolver.mip(problem_fit)
     
     def plot(self, best_state):
         raise NotImplementedError
