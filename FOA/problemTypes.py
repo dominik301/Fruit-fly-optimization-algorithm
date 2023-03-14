@@ -358,6 +358,7 @@ class Warehouse(AbstractWarehouse):
                 method = title.split(',')[0]
             name = type(self).__name__ + method + str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) + ".png"
             plt.savefig(name)
+            plt.close()
 
 class WarehouseOneDirection(Warehouse):
     def __init__(self, nRows=10, lotsPerRow=10):
@@ -388,6 +389,7 @@ class WarehouseOneDirection(Warehouse):
             if i!=0:
                 self.G.add_node(nNodes, pos=(i,0))
                 edges.append((nNodes, frontAisle, {"weight": 3}))
+                edges.append((frontAisle, nNodes, {"weight": 3}))
                 frontAisle = nNodes
                 last = nNodes
                 nNodes += 1
@@ -409,6 +411,7 @@ class WarehouseOneDirection(Warehouse):
             
             if i!=0:
                 edges.append((backAisle, nNodes, {"weight": 3}))
+                edges.append((nNodes, backAisle, {"weight": 3}))
             backAisle = nNodes
             nNodes += 1
 
@@ -585,3 +588,4 @@ class Rack(AbstractWarehouse):
                 method = title.split(',')[0]
             name = type(self).__name__ + method + str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) + ".png"
             plt.savefig(name)
+            plt.close()
