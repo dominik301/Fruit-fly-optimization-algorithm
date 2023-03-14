@@ -100,6 +100,14 @@ class TravellingSales(mlrose.TravellingSales):
         self.path_lengths = path_lengths
         self.prob_type = 'tsp'
 
+    def get_path_length(self, node1, node2):
+        if node1==node2: 
+            return 0
+        if self.coords is not None:
+            return np.linalg.norm(np.array(self.coords[node1])
+                                          - np.array(self.coords[node2]))
+        return self.path_lengths[(min(node1,node2),max(node1,node2))]
+
     def evaluate(self, state):
         """Evaluate the fitness of a state vector.
 
@@ -210,6 +218,11 @@ class TravellingSalesDirected(TravellingSales):
         self.distances = distances
         self.path_list = path_list
         self.dist_list = dist_list
+
+    def get_path_length(self, node1, node2):
+        if node1==node2: 
+            return 0
+        return self.path_lengths[(node1,node2)]
 
     def evaluate(self, state):
         """Evaluate the fitness of a state vector.

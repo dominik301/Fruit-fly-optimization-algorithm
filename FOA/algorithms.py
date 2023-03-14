@@ -479,7 +479,7 @@ class ExactSolver:
         y = [model.add_var() for _ in V]
 
         # objective function: minimize the distance
-        model.objective = minimize(xsum(problem.path_lengths[(min(i,j), max(i,j))]*x[i][j] for i in V for j in V))
+        model.objective = minimize(xsum(problem.fitness_fn.get_path_length(i,j)*x[i][j] for i in V for j in V))
 
         # constraint : leave each city only once
         for i in V:
@@ -497,13 +497,21 @@ class ExactSolver:
         # optimizing
         model.optimize()
 
+        best_state = np.zeros(problem.length, dtype=np.int32)
+
         # checking if a solution was found
         if model.num_solutions:
             print('route with total distance %g found: %s'
                     % (model.objective_value, 0))
             nc = 0
+            index = 1
             while True:
                 nc = [i for i in V if x[nc][i].x >= 0.99][0]
                 print(' -> %s' % nc)
                 if nc == 0:
                     break
+                best_state[index]=nc
+                index += 1
+        
+        best_fitness = problem.eval_fitness(best_state)
+        return best_state, best_fitness
