@@ -10,6 +10,7 @@ from operator import itemgetter
 from abc import ABC
 from fitnessFunctions import *
 from algorithms import FOA, EFOA
+import datetime
 
 class FOAOpt(mlrose.TSPOpt):
     def __init__(self, length, fitness_fn=None, maximize=False, coords=None,
@@ -325,7 +326,7 @@ class Warehouse(AbstractWarehouse):
             plt.imshow(B)
         plt.show()
 
-    def plot(self, best_state, both=False):
+    def plot(self, best_state, title=None, both=False, show=True):
         myedgelist, route = self.edgeListFromState(best_state)
         newedgelist = []
         for val in myedgelist:
@@ -335,12 +336,24 @@ class Warehouse(AbstractWarehouse):
         B = self.Block()
         self.addTargetsToBlock(B)
         pos=nx.get_node_attributes(self.G,'pos')
+        plt.figure(figsize=(15,10))
+        ax = plt.gca()
         nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
+        if title is not None:
+            ax.set_title(title)
+            ax.axis('off')
         if both:
             plt.figure()
             plt.imshow(B)
             plt.imshow(self.plotRoutes(route), alpha=0.5, cmap=plt.cm.gray)
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            method = ''
+            if title is not None:
+                method = title.split(',')[0]
+            name = type(self).__name__ + method + str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) + ".png"
+            plt.savefig(name)
 
 class WarehouseOneDirection(Warehouse):
     def __init__(self, nRows=10, lotsPerRow=10):
@@ -546,12 +559,25 @@ class Rack(AbstractWarehouse):
         problem_fit = FOAOpt(length = count+1, coords= self.randomPositions, maximize=False, roulette=roulette)
         return problem_fit
     
-    def plot(self, best_state):
+    def plot(self, best_state, title=None, show=True):
         myedgelist, _ = self.edgeListFromState(best_state)
         
         pos=nx.get_node_attributes(self.G,'pos')
+
+        plt.figure(figsize=(15,10))
+        ax = plt.gca()
+        if title is not None:
+            ax.set_title(title)
+            ax.axis('off')
         
-        nx.draw(self.G, pos, with_labels=True, font_weight='bold')
-        plt.figure()
+        #nx.draw(self.G, pos, with_labels=True, font_weight='bold')
+        #plt.figure()
         nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            method = ''
+            if title is not None:
+                method = title.split(',')[0]
+            name = type(self).__name__ + method + str(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) + ".png"
+            plt.savefig(name)

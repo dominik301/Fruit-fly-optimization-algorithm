@@ -246,7 +246,7 @@ class TravellingSalesDirected(TravellingSales):
         # Calculate length of each leg of journey
         for i in range(len(state)):
             node1 = state[i]
-            node2 = state[i + 1 % len(state)]
+            node2 = state[(i + 1) % len(state)]
 
             if self.is_coords:
                 fitness += np.linalg.norm(np.array(self.coords[node1])
