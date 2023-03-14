@@ -4,6 +4,8 @@ import networkx as nx
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 from operator import itemgetter
+from itertools import product, permutations
+from mip import Model, xsum, minimize, BINARY
 
 class FOA:
     def v1(bestSmell, fly, V_r=0.4, problem=None):
@@ -433,3 +435,75 @@ class EFOA:
             return best_state, best_fitness, np.asarray(fitness_curve)
 
         return best_state, best_fitness  
+
+
+class ExactSolver:
+    def bruteforce(problem):
+        """Use exact solver to find the optimum for a given
+        optimization problem.
+        Parameters
+        ----------
+        problem: optimization object
+            Object containing fitness function optimization problem to be solved.
+            For example, :code:`DiscreteOpt()`, :code:`ContinuousOpt()` or
+            :code:`TSPOpt()`.
+        Returns
+        -------
+        best_state: array
+            Numpy array containing state that optimizes the fitness function.
+        best_fitness: float
+            Value of fitness function at best state.
+        """
+        best_state = list(np.arange(problem.length))
+        best_fitness = -np.inf
+        states = list(permutations(best_state))
+        for state in states:
+            fitness = problem.eval_fitness(state)
+            if fitness > best_fitness:
+                best_fitness = fitness
+                best_state = state
+        return best_state, problem.get_maximize() * best_fitness
+
+    def mip(problem):
+
+        # number of nodes and list of vertices
+        n, V = problem.length, set(range(problem.length))
+
+        model = Model()
+
+        # binary variables indicating if arc (i,j) is used on the route or not
+        x = [[model.add_var(var_type=BINARY) for _ in V] for _ in V]
+
+        # continuous variable to prevent subtours: each city will have a
+        # different sequential id in the planned route except the first one
+        y = [model.add_var() for _ in V]
+
+        # objective function: minimize the distance
+        model.objective = minimize(xsum(problem.path_lengths[(min(i,j), max(i,j))]*x[i][j] for i in V for j in V))
+
+        # constraint : leave each city only once
+        for i in V:
+            model += xsum(x[i][j] for j in V - {i}) == 1
+
+        # constraint : enter each city only once
+        for i in V:
+            model += xsum(x[j][i] for j in V - {i}) == 1
+
+        # subtour elimination
+        for (i, j) in product(V - {0}, V - {0}):
+            if i != j:
+                model += y[i] - (n+1)*x[i][j] >= y[j]-n
+
+        # optimizing
+        model.optimize()
+
+        # checking if a solution was found
+        if model.num_solutions:
+            print('route with total distance %g found: %s'
+                    % (model.objective_value, 0))
+            nc = 0
+            while True:
+                nc = [i for i in V if x[nc][i].x >= 0.99][0]
+                print(' -> %s' % nc)
+                if nc == 0:
+                    break
