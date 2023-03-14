@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from operator import itemgetter
 
 class FOA:
-    def v1(bestSmell, fly, V_r=0.4):
+    def v1(bestSmell, fly, V_r=0.4, problem=None):
         items = floor(V_r * bestSmell.size)
         replace = bestSmell[:items]
         i = 0
@@ -19,7 +19,7 @@ class FOA:
                     break
         return newfly
 
-    def v3(bestSmell, fly, V_r=0.4):
+    def v3(bestSmell, fly, V_r=0.4, problem=None):
         items = floor(V_r * bestSmell.size)
         start = np.random.randint(0, len(fly)-1)
         bestSmell = np.append(bestSmell, bestSmell)
@@ -141,7 +141,7 @@ class FOA:
                 if currentFitness != problem.eval_fitness(fly):
                     is_smell_concentration_equal = False
                     
-                best_fly = FOA.s1(problem, fly, NN)
+                best_fly = smellFn(problem, fly, NN)
                 next_gen.append(best_fly)
             if not is_smell_concentration_equal:
                 next_gen = np.array(next_gen)
@@ -153,7 +153,7 @@ class FOA:
                     # Select parents
                     fly = problem.get_population()[i]
                     if not np.array_equal(fly, currentBest):
-                        fly = FOA.v3(currentBest, fly, V_r)
+                        fly = visionFn(currentBest, fly, V_r, problem)
                     next_gen.append(fly)
 
             next_gen = np.array(next_gen)
@@ -181,6 +181,16 @@ class FOA:
             return best_state, best_fitness, np.asarray(fitness_curve)
 
         return best_state, best_fitness
+    
+    def crossover(bestSmell, fly, V_r=0, problem=None):
+        newfly = problem.reproduce(fly, bestSmell, 0)
+        if problem.eval_fitness(newfly) > problem.eval_fitness(fly):
+            fly = newfly     
+        return fly
+    
+    def ifoa(problem, **kwargs):
+        return FOA.foa(problem, visionFn=FOA.crossover, **kwargs)
+        
 
 class EFOA:
     def reverseOperatorCoords(fly:np.array, coords, G=None, debug=False):

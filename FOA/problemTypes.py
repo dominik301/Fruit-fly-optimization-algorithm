@@ -11,6 +11,88 @@ from abc import ABC
 from fitnessFunctions import *
 from algorithms import FOA, EFOA
 
+class FOAOpt(mlrose.DiscreteOpt):
+    def __init__(self, length, fitness_fn=None, maximize=False, coords=None,
+                 distances=None, roulette=False):
+        if (fitness_fn is None) and (coords is None) and (distances is None):
+            raise Exception("""At least one of fitness_fn, coords and"""
+                            + """ distances must be specified.""")
+        elif fitness_fn is None:
+            fitness_fn = TravellingSales(coords=coords, distances=distances)
+
+        super().__init__(length, fitness_fn, maximize,
+                             max_val=length)
+
+        if self.fitness_fn.get_prob_type() != 'tsp':
+            raise Exception("""fitness_fn must have problem type 'tsp'.""")
+
+        self.prob_type = 'tsp'
+        
+        self.probs = np.zeros((self.length, self.length), dtype=np.int8)
+        for val in self.fitness_fn.distances:
+            n1,n2,dist = val
+            self.probs[n1,n2] = 1/dist
+            self.probs[n2,n1] = 1/dist
+        self.roulette = roulette
+
+    def adjust_probs(self, probs):
+        """Normalize a vector of probabilities so that the vector sums to 1.
+
+        Parameters
+        ----------
+        probs: array
+            Vector of probabilities that may or may not sum to 1.
+
+        Returns
+        -------
+        adj_probs: array
+            Vector of probabilities that sums to 1. Returns a zero vector if
+            sum(probs) = 0.
+        """
+        if np.sum(probs) == 0:
+            adj_probs = np.zeros(np.shape(probs))
+
+        else:
+            adj_probs = probs/np.sum(probs)
+
+        return adj_probs
+
+    def random(self):
+        """Generate single sample from probability density.
+
+        Returns
+        -------
+        state: array
+        """
+        if not self.roulette:
+            return np.random.permutation(self.length)
+        
+        remaining = list(np.arange(self.length))
+        state = np.zeros(self.length, dtype=np.int32)
+
+        # Get value of first element in new sample
+        state[0] = np.random.choice(self.length)
+        remaining.remove(state[0])
+        probs = np.copy(self.probs)
+        probs[:,state[0]] = 0
+
+        next_node = state[0]
+
+        for i in range(1, self.length):
+
+            if np.sum(probs[next_node]) == 0:
+                next_node = np.random.choice(remaining)
+
+            else:
+                adj_probs = self.adjust_probs(probs[next_node])
+                next_node = np.random.choice(self.length, p=adj_probs)
+
+            state[i] = next_node
+            remaining.remove(next_node)
+            probs[:,next_node] = 0
+
+        return state
+
 class AbstractWarehouse(ABC):
     def __init__(self, nRows=10, lotsPerRow=10):
         self.G = nx.Graph()
@@ -19,32 +101,35 @@ class AbstractWarehouse(ABC):
         self.lotsPerRow = lotsPerRow
         self.iterations = 0
 
-    def createGraph(self, nLots=5):
+    def createGraph(self, nLots=10):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''    
         raise NotImplementedError
 
     def edgeListFromState(self, state):
         raise NotImplementedError
 
-    def init_problem(self, count=22):
+    def init_problem(self, count=20):
         raise NotImplementedError
     
-    def solve(self, count=22, pop_size=200, V_r=0.4, NN=10, visionFn=None):
-        problem_fit = self.init_problem(count)
-        return FOA.foa(problem_fit, pop_size=pop_size, V_r=V_r, NN=NN, visionFn=visionFn)
+    def solve(self, count=20, roulette=False, **kwargs):
+        problem_fit = self.init_problem(count, roulette=roulette)
+        return FOA.foa(problem_fit, **kwargs)
     
-    def solve_efoa(self, count=22, pop_size=200, curve=False):
-        problem_fit = self.init_problem(count)
-        return EFOA.efoa(problem_fit, pop_size=pop_size, curve=curve)
+    def solve_efoa(self, count=20, roulette=False, **kwargs):
+        problem_fit = self.init_problem(count, roulette=roulette)
+        return EFOA.efoa(problem_fit, **kwargs)
     
-    def solve_ga(self, count=22):
-        problem_fit = self.init_problem(count)
-        return mlrose.genetic_alg(problem_fit, mutation_prob = 0.2,
-                                              max_attempts = 100)
+    def solve_ga(self, count=20, roulette=False):
+        problem_fit = self.init_problem(count, roulette=roulette)
+        return mlrose.genetic_alg(problem_fit, mutation_prob = 0.2, max_attempts = 100)
     
-    def solve_sa(self, count=22):
-        problem_fit = self.init_problem(count)
+    def solve_sa(self, count=20, roulette=False):
+        problem_fit = self.init_problem(count, roulette=roulette)
         return mlrose.simulated_annealing(problem_fit)
+    
+    def solve_ifoa(self, count=20, roulette=False, **kwargs):
+        problem_fit = self.init_problem(count, roulette=roulette)
+        return FOA.ifoa(problem_fit, **kwargs)
     
     def plot(self, best_state):
         raise NotImplementedError
@@ -68,7 +153,7 @@ class Warehouse(AbstractWarehouse):
             y = target[1]
             board[x,y] = 1/2
 
-    def createGraph(self, nLots=5):
+    def createGraph(self, nLots=10):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
         rng = np.random.RandomState(2)
         for _ in range(nLots):
@@ -155,17 +240,17 @@ class Warehouse(AbstractWarehouse):
 
         return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
 
-    def init_problem(self, count=22):
+    def init_problem(self, count=20, roulette=False):
         if self.iterations == 0:
             self.createGraph(nLots=count)
             self.mDist = self.findShortestPath(count)
 
         self.iterations += 1
         
-        problem_fit = mlrose.TSPOpt(length = count+1, distances = self.mDist, maximize=False)
+        problem_fit = FOAOpt(length = count+1, distances = self.mDist, maximize=False, roulette=roulette)
         return problem_fit
     
-    def sshape(self, count=22):
+    def sshape(self, count=20):
         if self.iterations == 0:
             self.createGraph(nLots=count)
             self.mDist = self.findShortestPath(count)
@@ -202,7 +287,7 @@ class Warehouse(AbstractWarehouse):
         
         return best_state, best_fitness
 
-    def midpoint(self, count=22):
+    def midpoint(self, count=20):
         if self.iterations == 0:
             self.createGraph(nLots=count)
             self.mDist = self.findShortestPath(count)
@@ -288,7 +373,7 @@ class WarehouseOneDirection(Warehouse):
         super().__init__(nRows, lotsPerRow)
         self.G = nx.DiGraph()
 
-    def createGraph(self, nLots=5):
+    def createGraph(self, nLots=10):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
         rng = np.random.RandomState(2)
         for _ in range(nLots):
@@ -361,15 +446,15 @@ class WarehouseOneDirection(Warehouse):
 
         return [(route[i],route[i+1]) for i in range(len(route)-1)] , route
 
-    def init_problem(self, count=22):
+    def init_problem(self, count=20, roulette=False):
         if self.iterations == 0:
             self.createGraph(nLots=count)
             self.mDist = self.findShortestPath(count)
 
         self.iterations += 1
         
-        problem_fit = mlrose.TSPOpt(length = count+1, distances = self.mDist,  maximize=False,
-                                    fitness_fn = TravellingSalesDirected(distances=self.mDist))
+        problem_fit = FOAOpt(length = count+1, distances = self.mDist,  maximize=False,
+                                    fitness_fn = TravellingSalesDirected(distances=self.mDist), roulette=roulette)
         return problem_fit
 
 class WarehouseWithAisles(Warehouse):
@@ -388,7 +473,7 @@ class WarehouseWithAisles(Warehouse):
         board[1,0]=1/4
         return board
 
-    def createGraph(self, nLots=5):
+    def createGraph(self, nLots=10):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''
         rng = np.random.RandomState(2)
         for _ in range(nLots):
@@ -463,7 +548,7 @@ class Rack(AbstractWarehouse):
     def __init__(self, nRows=10, lotsPerRow=10):
         super().__init__(nRows, lotsPerRow)
 
-    def createGraph(self, nLots=5):
+    def createGraph(self, nLots=10):
         '''creates a Graph with nRows rows of lotsPerRow lots each, and nLots random lots'''    
         nNodes = 1
         self.G.add_node(0, pos=(0,0))
@@ -478,13 +563,13 @@ class Rack(AbstractWarehouse):
     def edgeListFromState(self, state):
         return [(state[i],state[(i+1)%len(state)]) for i in range(len(state))] , state
 
-    def init_problem(self, count=22):
+    def init_problem(self, count=20, roulette=False):
         if self.iterations == 0:
             self.createGraph(nLots=count)
 
         self.iterations += 1
         
-        problem_fit = mlrose.TSPOpt(length = count+1, coords= self.randomPositions, maximize=False)
+        problem_fit = FOAOpt(length = count+1, coords= self.randomPositions, maximize=False, roulette=roulette)
         return problem_fit
     
     def plot(self, best_state):
@@ -496,20 +581,3 @@ class Rack(AbstractWarehouse):
         plt.figure()
         nx.draw(self.G.to_directed(), pos, edgelist=myedgelist, with_labels=True, font_weight='bold')
         plt.show()
-
-if __name__ == "__main__":
-    warehouse = Rack(10,30)
-    _,_,curve = warehouse.solve_efoa(10,curve=True)
-    plt.plot(curve)
-    plt.show()
-    #best_state, _ = warehouse.solve(20)
-    #warehouse.plot(best_state,both=True)
-
-    """
-    x = np.array([0.01*i for i in range(1,501)])
-    c = 1
-    mu = 0
-    y = np.array([np.sqrt(c/2/np.pi)*np.exp(-c/(2*(i-mu)))/(i-mu)**(3/2) for i in x])
-
-    plt.plot(x,y)
-    plt.show()"""

@@ -89,11 +89,15 @@ class TravellingSales(mlrose.TravellingSales):
                                 + """ distances.""")
 
             path_list = list(zip(node1_list, node2_list))
+            path_lengths = {}
+            for i in range(len(path_list)):
+                path_lengths[path_list[i]] = dist_list[i]
 
         self.coords = coords
         self.distances = distances
         self.path_list = path_list
         self.dist_list = dist_list
+        self.path_lengths = path_lengths
         self.prob_type = 'tsp'
 
     def evaluate(self, state):
@@ -112,7 +116,39 @@ class TravellingSales(mlrose.TravellingSales):
             two consecutive nodes on the tour is not possible.
         """
 
-        super().evaluate(state)
+        if self.is_coords and len(state) != len(self.coords):
+            raise Exception("""state must have the same length as coords.""")
+
+        if not len(state) == len(set(state)):
+            raise Exception("""Each node must appear exactly once in state.""")
+
+        if min(state) < 0:
+            raise Exception("""All elements of state must be non-negative"""
+                            + """ integers.""")
+
+        if max(state) >= len(state):
+            raise Exception("""All elements of state must be less than"""
+                            + """ len(state).""")
+
+        fitness = 0
+
+        # Calculate length of each leg of journey
+        for i in range(len(state)):
+            node1 = state[i]
+            node2 = state[(i + 1) % len(state)]
+
+            if self.is_coords:
+                fitness += np.linalg.norm(np.array(self.coords[node1])
+                                          - np.array(self.coords[node2]))
+            else:
+                path = (min(node1, node2), max(node1, node2))
+
+                if path in self.path_list:
+                    fitness += self.path_lengths[path]
+                else:
+                    fitness += np.inf
+
+        return fitness
 
 
 class TravellingSalesDirected(TravellingSales):
@@ -166,7 +202,11 @@ class TravellingSalesDirected(TravellingSales):
                             + """ distances.""")
 
         path_list = list(zip(node1_list, node2_list))
-
+        path_lengths = {}
+        for i in range(len(path_list)):
+            path_lengths[path_list[i]] = dist_list[i]
+        
+        self.path_lengths = path_lengths
         self.distances = distances
         self.path_list = path_list
         self.dist_list = dist_list
@@ -204,9 +244,9 @@ class TravellingSalesDirected(TravellingSales):
         fitness = 0
 
         # Calculate length of each leg of journey
-        for i in range(len(state) - 1):
+        for i in range(len(state)):
             node1 = state[i]
-            node2 = state[i + 1]
+            node2 = state[i + 1 % len(state)]
 
             if self.is_coords:
                 fitness += np.linalg.norm(np.array(self.coords[node1])
@@ -215,24 +255,9 @@ class TravellingSalesDirected(TravellingSales):
                 path = (node1, node2)
                 
                 if path in self.path_list:
-                    fitness += self.dist_list[self.path_list.index(path)]
+                    fitness += self.path_lengths[path]
                 else:
                     fitness += np.inf
-
-        # Calculate length of final leg
-        node1 = state[-1]
-        node2 = state[0]
-
-        if self.is_coords:
-            fitness += np.linalg.norm(np.array(self.coords[node1])
-                                      - np.array(self.coords[node2]))
-        else:
-            path = (node1, node2)
-
-            if path in self.path_list:
-                fitness += self.dist_list[self.path_list.index(path)]
-            else:
-                fitness += np.inf
 
         return fitness
 
