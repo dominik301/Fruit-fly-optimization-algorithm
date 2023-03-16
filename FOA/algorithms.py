@@ -409,7 +409,9 @@ class EFOA:
             sorted_next = sorted(next_gen, key=problem.eval_fitness,reverse=True)
             last = round((1-p) * pop_size) + 1
             next_gen = sorted_next[:last]
-            next_gen = np.concatenate((next_gen, [problem.random() for _ in range(pop_size - len(next_gen))]))
+            toAdd = [problem.random() for _ in range(pop_size - len(next_gen))]
+            if len(toAdd) != 0:
+                next_gen = np.concatenate((next_gen, toAdd))
             problem.set_population(next_gen)
             next_gen = []
 

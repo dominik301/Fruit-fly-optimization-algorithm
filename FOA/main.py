@@ -1,9 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from problemTypes import *
+from foa.problemTypes import *
 import datetime
 import pandas as pd
+from hyperopt import hp, fmin, rand, Trials, space_eval, STATUS_OK, tpe
+from hyperopt.mongoexp import MongoTrials
 
 TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING", "VISION"]
 FUNCTIONS = {"solve_efoa": "EFOA", "solve": "FOA", "midpoint": "Mittelpunkt", "sshape": "S-Form", "solve_ga": "GA", "solve_sa": "SA"}
@@ -45,7 +47,7 @@ class Solver:
             print("Fitness: ", np.mean(fitnesses), "+/-", np.std(fitnesses))
             print("Time: ", np.mean(times), "+/-", np.std(times))
         self.results[name] = {"fitness": fitnesses, "time": times}
-        return best_state, best_fitness
+        return best_state, np.mean(fitnesses)
     
     def heuristics(self):
         for fn in [self.problemType.midpoint, self.problemType.sshape]:
@@ -207,8 +209,104 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([schedule.__name__ for schedule in vec_schedule], testCase="SA Schedule")
         self.results = {}
 
+    def objective(self, fn, args):
+        # define an objective function
+        start = time.time()
+        _, best_fitness = self.simulate(fn, 3, **args)
+        return {'loss': best_fitness, 'eval_time': time.time() - start, 'status': STATUS_OK, 'other_stuff': {'args': args}}
+    
+    def objective_foa(self, args):
+        return self.objective(self.problemType.solve, args)
+    
+    def objective_efoa(self, args):
+        return self.objective(self.problemType.solve_efoa, args)
+    
+    def objective_ga(self, args):
+        return self.objective(self.problemType.solve_ga, args)
+    
+    def objective_sa(self, args):
+        return self.objective(self.problemType.solve_sa, args)
+
+    def tune_random(self, alg='SA'):
+        # define a search space
+        if alg == 'FOA':
+            space = {
+                'NN': 1 + hp.randint('NN', 19),
+                'V_r': hp.uniform('V_r', 0.1, 0.5),
+                'pop_size': 50 + hp.randint('pop_size', 450),
+                'max_attempts': 1 + hp.randint('max_attempts', 99),
+            }
+            fn = self.objective_foa
+        elif alg == 'EFOA':
+            space = {
+                'p': hp.uniform('p', 0, 0.2),
+                'pop_size': 50 + hp.randint('pop_size', 450),
+                'max_attempts': 1 + hp.randint('max_attempts', 99)
+            }
+            fn = self.objective_efoa
+        elif alg == 'GA':
+            space = {
+                'pop_size': 50 + hp.randint('pop_size', 450),
+                'mutation_prob': hp.uniform('mutation_prob', 0, 0.5),
+                'max_attempts': 1 + hp.randint('max_attempts', 99)
+            }
+            fn = self.objective_ga
+        elif alg == 'SA':
+            space = {
+                'schedule': hp.choice('schedule', ["GeomDecay", "ExpDecay", "ArithDecay"]),
+                'max_attempts': 1 + hp.randint('max_attempts', 99)
+            }
+            fn = self.objective_sa
+        else:
+            raise Exception('Unknown algorithm: ' + alg)
+
+        # minimize the objective over the space
+        trials = MongoTrials('mongo://localhost:1234/foo2_db/jobs', exp_key=alg+ str(2))
+        best = fmin(fn, space, algo=rand.suggest, max_evals=50, trials=trials)
+
+        print(space_eval(space, best))
+        
+        results = []
+        for result in trials.results:
+            results.append([result['loss'], result['eval_time'], result['other_stuff']['args']])
+        results = sorted(results, key=lambda x: [x[0], x[1]])
+        
+        rows  = []
+        for value in results[0][2].keys():
+            rows.append(str(value))
+        rows.append('loss')
+        rows.append('eval_time')
+        print(rows)
+        for result in results:
+            solution = ""
+            for value in result[2].values():
+                if isinstance(value, float):
+                    solution += "{:.2f}".format(value) + " & "
+                else:
+                    solution += str(value) + " & "
+            solution += str(int(result[0])) + " & " + "{:.2f}".format(result[1]) + " \\\\"
+            print(solution)
+        results = np.array(results)
+        if True:
+            plt.scatter(results[:,1],results[:,0])
+            ax = plt.gca()
+            plt.xlabel('Zeit (s)')
+            plt.ylabel('Fitness')
+            ax.set_title('Fitness vs. Zeit')
+            plt.show()
+        if False:
+            for x in rows[:-2]:
+                print([result[x] for result in results[:,2]])
+                print(results[:,0])
+                plt.scatter([result[x] for result in results[:,2]],results[:,0])
+                ax = plt.gca()
+                plt.xlabel(x)
+                plt.ylabel('Fitness')
+                ax.set_title('Fitness vs. ' + x)
+                plt.show()
+
 if __name__ == "__main__":
-    testCase = "RACK"
+    testCase = "HYPERPARAMETER_TUNING"
 
     if testCase == "RACK":
         solver = Solver(Rack, nRows=10, lotsPerRow=30, count=10)
@@ -238,7 +336,9 @@ if __name__ == "__main__":
         #tuner.tune()
         #tuner.tune_efoa()
         #tuner.tune_sa()
-        tuner.tune_ga()
+        #tuner.tune_ga()
+        for alg in ['FOA', 'EFOA', 'GA', 'SA']:
+            tuner.tune_random(alg)
     else:
         functions = [solver.problemType.solve_efoa, solver.problemType.solve, solver.problemType.solve_ga, solver.problemType.solve_sa]
         solver.solve_for_fn(functions, n=10)
