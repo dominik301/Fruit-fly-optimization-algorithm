@@ -86,19 +86,19 @@ class AbstractWarehouse(ABC):
     def init_problem(self, count=20):
         raise NotImplementedError
     
-    def solve(self, count=20, roulette=False, max_attempts=50, **kwargs):
+    def solve(self, count=20, roulette=False, max_attempts=30, NN=13, V_r=0.16, pop_size=50, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return FOA.foa(problem_fit, max_attempts=max_attempts, **kwargs)
+        return FOA.foa(problem_fit, max_attempts=max_attempts, NN=NN, V_r=V_r, pop_size=pop_size, **kwargs)
     
-    def solve_efoa(self, count=20, roulette=False, max_attempts=50, **kwargs):
+    def solve_efoa(self, count=20, roulette=False, max_attempts=55, p=0.17, pop_size=118, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return EFOA.efoa(problem_fit, max_attempts=max_attempts, **kwargs)
+        return EFOA.efoa(problem_fit, max_attempts=max_attempts, p=p, pop_size=pop_size, **kwargs)
     
-    def solve_ga(self, count=20, roulette=False, mutation_prob=0.2, max_attempts=50, **kwargs):
+    def solve_ga(self, count=20, roulette=False, mutation_prob=0.42, max_attempts=92, pop_size=98, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return mlrose.genetic_alg(problem_fit, mutation_prob = mutation_prob, max_attempts = max_attempts, **kwargs)
+        return mlrose.genetic_alg(problem_fit, mutation_prob = mutation_prob, max_attempts = max_attempts, pop_size=pop_size, **kwargs)
     
-    def solve_sa(self, count=20, roulette=False, schedule=mlrose.GeomDecay(), max_attempts=50):
+    def solve_sa(self, count=20, roulette=False, schedule=mlrose.ExpDecay(), max_attempts=77):
         problem_fit = self.init_problem(count, roulette=roulette)
         return mlrose.simulated_annealing(problem_fit, schedule=schedule, max_attempts=max_attempts)
     
