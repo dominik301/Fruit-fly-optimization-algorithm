@@ -86,21 +86,21 @@ class AbstractWarehouse(ABC):
     def init_problem(self, count=20):
         raise NotImplementedError
     
-    def solve(self, count=20, roulette=False, **kwargs):
+    def solve(self, count=20, roulette=False, max_attempts=50, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return FOA.foa(problem_fit, **kwargs)
+        return FOA.foa(problem_fit, max_attempts=max_attempts, **kwargs)
     
-    def solve_efoa(self, count=20, roulette=False, **kwargs):
+    def solve_efoa(self, count=20, roulette=False, max_attempts=50, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return EFOA.efoa(problem_fit, **kwargs)
+        return EFOA.efoa(problem_fit, max_attempts=max_attempts, **kwargs)
     
-    def solve_ga(self, count=20, roulette=False):
+    def solve_ga(self, count=20, roulette=False, mutation_prob=0.2, max_attempts=50, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return mlrose.genetic_alg(problem_fit, mutation_prob = 0.2, max_attempts = 100)
+        return mlrose.genetic_alg(problem_fit, mutation_prob = mutation_prob, max_attempts = max_attempts, **kwargs)
     
-    def solve_sa(self, count=20, roulette=False):
+    def solve_sa(self, count=20, roulette=False, schedule=mlrose.GeomDecay(), max_attempts=50):
         problem_fit = self.init_problem(count, roulette=roulette)
-        return mlrose.simulated_annealing(problem_fit)
+        return mlrose.simulated_annealing(problem_fit, schedule=schedule, max_attempts=max_attempts)
     
     def solve_ifoa(self, count=20, roulette=False, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)

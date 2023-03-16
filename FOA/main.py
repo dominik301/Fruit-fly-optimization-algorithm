@@ -60,7 +60,7 @@ class Solver:
             print(fn.__name__)
             best_state, best_fitness = self.simulate(fn, n)
             print("Best fitness: ", best_fitness)
-            self.problemType.plot(best_state, FUNCTIONS[fn.__name__] + ", Länge: " + str(best_fitness))
+            #self.problemType.plot(best_state, FUNCTIONS[fn.__name__] + ", Länge: " + str(best_fitness))
 
     def plotStatistics(self, rows=None, x_axis=None, testCase="", show=True):
         if x_axis == None:
@@ -127,7 +127,7 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(NN) for NN in vec_NN], testCase="NN")
         self.results = {}
 
-    def tune_efoa(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[10,100], vec_p=[0.05,0.1,0.2]):
+    def tune_efoa(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[25,50,75], vec_p=[0.05,0.1,0.2]):
         for pop_size in vec_pop_size:
             print("Pop size: ", pop_size)
             _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(pop_size), pop_size=pop_size)
@@ -136,7 +136,7 @@ class HyperParameterTuning(Solver):
 
         self.plotStatistics([str(pop_size) for pop_size in vec_pop_size], testCase="EFOA Popsize")
         self.results = {}
-
+        
         for attempts in vec_attempts:
             print("Attempts: ", attempts)
             _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(attempts), max_attempts=attempts)
@@ -145,7 +145,6 @@ class HyperParameterTuning(Solver):
         
         self.plotStatistics([str(attempts) for attempts in vec_attempts], testCase="EFOA Attempts")
         self.results = {}
-
         for p in vec_p:
             print("p: ", p)
             _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(p), p=p)
@@ -155,8 +154,61 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(p) for p in vec_p], testCase="EFOA p")
         self.results = {}
 
+    def tune_ga(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[25,50,75], vec_mutation_prob=[0.05,0.1,0.2,0.3]):
+        for pop_size in vec_pop_size:
+            print("Pop size: ", pop_size)
+            _, best_fitness = self.simulate(self.problemType.solve_ga, n, name=str(pop_size), pop_size=pop_size)
+
+            print("Best fitness: ", best_fitness)
+
+        self.plotStatistics([str(pop_size) for pop_size in vec_pop_size], testCase="GA Popsize")
+        self.results = {}
+        
+        for attempts in vec_attempts:
+            print("Attempts: ", attempts)
+            _, best_fitness = self.simulate(self.problemType.solve_ga, n, name=str(attempts), max_attempts=attempts)
+
+            print("Best fitness: ", best_fitness)
+        
+        self.plotStatistics([str(attempts) for attempts in vec_attempts], testCase="GA Attempts")
+        self.results = {}
+        for p in vec_mutation_prob:
+            print("p: ", p)
+            _, best_fitness = self.simulate(self.problemType.solve_ga, n, name=str(p), mutation_prob=p)
+
+            print("Best fitness: ", best_fitness)
+
+        self.plotStatistics([str(p) for p in vec_mutation_prob], testCase="GA mutation probabiliy")
+        self.results = {}
+
+    def tune_sa(self, n=10, vec_attempts=[10,50,100], vec_schedule=[mlrose.GeomDecay, mlrose.ExpDecay, mlrose.ArithDecay]):
+        '''schedule: schedule object, default: :code:`mlrose.GeomDecay()`
+            Schedule used to determine the value of the temperature parameter.
+        max_attempts: int, default: 10
+            Maximum number of attempts to find a better neighbor at each step.
+        max_iters: int, default: np.inf
+            Maximum number of iterations of the algorithm.'''
+        
+        for attempts in vec_attempts:
+            print("Attempts: ", attempts)
+            _, best_fitness = self.simulate(self.problemType.solve_sa, n, name=str(attempts), max_attempts=attempts)
+
+            print("Best fitness: ", best_fitness)
+        
+        self.plotStatistics([str(attempts) for attempts in vec_attempts], testCase="SA Attempts")
+        self.results = {}
+
+        for schedule in vec_schedule:
+            print("Schedule: ", schedule.__name__)
+            _, best_fitness = self.simulate(self.problemType.solve_sa, n, name=schedule.__name__, schedule=schedule())
+
+            print("Best fitness: ", best_fitness)
+
+        self.plotStatistics([schedule.__name__ for schedule in vec_schedule], testCase="SA Schedule")
+        self.results = {}
+
 if __name__ == "__main__":
-    testCase = "HYPERPARAMETER_TUNING"
+    testCase = "RACK"
 
     if testCase == "RACK":
         solver = Solver(Rack, nRows=10, lotsPerRow=30, count=10)
@@ -183,8 +235,10 @@ if __name__ == "__main__":
             solver.problemType.plot(best_state)
         solver.plotStatistics([v.__name__ for v in V], x_axis=['V1', 'V3'], testCase=testCase)
     elif testCase == "HYPERPARAMETER_TUNING":
-        tuner.tune()
-        tuner.tune_efoa()
+        #tuner.tune()
+        #tuner.tune_efoa()
+        #tuner.tune_sa()
+        tuner.tune_ga()
     else:
         functions = [solver.problemType.solve_efoa, solver.problemType.solve, solver.problemType.solve_ga, solver.problemType.solve_sa]
         solver.solve_for_fn(functions, n=10)
