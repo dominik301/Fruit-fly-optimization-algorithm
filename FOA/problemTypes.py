@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from operator import itemgetter
 from abc import ABC
-from fitnessFunctions import *
-from algorithms import FOA, EFOA, ExactSolver
+from .fitnessFunctions import *
+from .algorithms import FOA, EFOA, ExactSolver
 import datetime
 
 class FOAOpt(mlrose.TSPOpt):
@@ -98,9 +98,11 @@ class AbstractWarehouse(ABC):
         problem_fit = self.init_problem(count, roulette=roulette)
         return mlrose.genetic_alg(problem_fit, mutation_prob = mutation_prob, max_attempts = max_attempts, pop_size=pop_size, **kwargs)
     
-    def solve_sa(self, count=20, roulette=False, schedule=mlrose.ExpDecay(), max_attempts=77):
+    def solve_sa(self, count=20, roulette=False, schedule=mlrose.ExpDecay, max_attempts=77):
+        if type(schedule) == str:
+            schedule = getattr(mlrose, schedule)
         problem_fit = self.init_problem(count, roulette=roulette)
-        return mlrose.simulated_annealing(problem_fit, schedule=schedule, max_attempts=max_attempts)
+        return mlrose.simulated_annealing(problem_fit, schedule=schedule(), max_attempts=max_attempts)
     
     def solve_ifoa(self, count=20, roulette=False, **kwargs):
         problem_fit = self.init_problem(count, roulette=roulette)
