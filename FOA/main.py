@@ -6,6 +6,8 @@ import datetime
 import pandas as pd
 from hyperopt import hp, fmin, rand, Trials, space_eval, STATUS_OK, tpe
 from hyperopt.mongoexp import MongoTrials
+import multiprocessing
+import sys
 
 TEST_CASES = ["RACK","WAREHOUSE","WAREHOUSE_WITH_AISLES","WAREHOUSE_ONE_DIRECTION","HYPERPARAMETER_TUNING", "VISION"]
 FUNCTIONS = {"solve_efoa": "EFOA", "solve": "FOA", "midpoint": "Mittelpunkt", "sshape": "S-Form", "solve_ga": "GA", "solve_sa": "SA"}
@@ -101,7 +103,7 @@ class HyperParameterTuning(Solver):
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
 
-    def tune(self, n=10, vec_pop_size=[100,300], vec_V_r=[0.1,0.5], vec_NN=[5,15]):
+    def tune(self, n=10, vec_pop_size=[50,100,200], vec_V_r=[0.1,0.3,0.5], vec_NN=[5,10,15]):
         for pop_size in vec_pop_size:
             print("Pop size: ", pop_size)
             _, best_fitness = self.simulate(self.problemType.solve, n, name=str(pop_size), pop_size=pop_size)
@@ -129,7 +131,7 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(NN) for NN in vec_NN], testCase="NN")
         self.results = {}
 
-    def tune_efoa(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[25,50,75], vec_p=[0.05,0.1,0.2]):
+    def tune_efoa(self, n=10, vec_pop_size=[50,100,200], vec_attempts=[25,50,100], vec_p=[0.05,0.1,0.2]):
         for pop_size in vec_pop_size:
             print("Pop size: ", pop_size)
             _, best_fitness = self.simulate(self.problemType.solve_efoa, n, name=str(pop_size), pop_size=pop_size)
@@ -156,7 +158,7 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(p) for p in vec_p], testCase="EFOA p")
         self.results = {}
 
-    def tune_ga(self, n=10, vec_pop_size=[100,200,1000], vec_attempts=[25,50,75], vec_mutation_prob=[0.05,0.1,0.2,0.3]):
+    def tune_ga(self, n=10, vec_pop_size=[50,100,200], vec_attempts=[25,50,100], vec_mutation_prob=[0.1,0.2,0.4]):
         for pop_size in vec_pop_size:
             print("Pop size: ", pop_size)
             _, best_fitness = self.simulate(self.problemType.solve_ga, n, name=str(pop_size), pop_size=pop_size)
@@ -183,7 +185,7 @@ class HyperParameterTuning(Solver):
         self.plotStatistics([str(p) for p in vec_mutation_prob], testCase="GA mutation probabiliy")
         self.results = {}
 
-    def tune_sa(self, n=10, vec_attempts=[10,50,100], vec_schedule=[mlrose.GeomDecay, mlrose.ExpDecay, mlrose.ArithDecay]):
+    def tune_sa(self, n=10, vec_attempts=[25,50,100], vec_schedule=[mlrose.GeomDecay, mlrose.ExpDecay, mlrose.ArithDecay]):
         '''schedule: schedule object, default: :code:`mlrose.GeomDecay()`
             Schedule used to determine the value of the temperature parameter.
         max_attempts: int, default: 10
@@ -227,7 +229,7 @@ class HyperParameterTuning(Solver):
     def objective_sa(self, args):
         return self.objective(self.problemType.solve_sa, args)
 
-    def tune_random(self, alg='SA'):
+    def tune_random(self, alg='SA', debug=False):
         # define a search space
         if alg == 'FOA':
             space = {
@@ -264,50 +266,32 @@ class HyperParameterTuning(Solver):
         trials = MongoTrials('mongo://localhost:1234/foo2_db/jobs', exp_key=alg+ str(2))
         best = fmin(fn, space, algo=rand.suggest, max_evals=50, trials=trials)
 
-        print(space_eval(space, best))
+        #print(space_eval(space, best))
         
         results = []
         for result in trials.results:
             results.append([result['loss'], result['eval_time'], result['other_stuff']['args']])
         results = sorted(results, key=lambda x: [x[0], x[1]])
         
-        rows  = []
-        for value in results[0][2].keys():
-            rows.append(str(value))
-        rows.append('loss')
-        rows.append('eval_time')
-        print(rows)
-        for result in results:
-            solution = ""
-            for value in result[2].values():
-                if isinstance(value, float):
-                    solution += "{:.2f}".format(value) + " & "
-                else:
-                    solution += str(value) + " & "
-            solution += str(int(result[0])) + " & " + "{:.2f}".format(result[1]) + " \\\\"
-            print(solution)
-        results = np.array(results)
-        if True:
-            plt.scatter(results[:,1],results[:,0])
-            ax = plt.gca()
-            plt.xlabel('Zeit (s)')
-            plt.ylabel('Fitness')
-            ax.set_title('Fitness vs. Zeit')
-            plt.show()
-        if False:
-            for x in rows[:-2]:
-                print([result[x] for result in results[:,2]])
-                print(results[:,0])
-                plt.scatter([result[x] for result in results[:,2]],results[:,0])
-                ax = plt.gca()
-                plt.xlabel(x)
-                plt.ylabel('Fitness')
-                ax.set_title('Fitness vs. ' + x)
-                plt.show()
+        if debug:
+            rows  = []
+            for value in results[0][2].keys():
+                rows.append(str(value))
+            rows.append('loss')
+            rows.append('eval_time')
+            print(rows)
+            for result in results:
+                solution = ""
+                for value in result[2].values():
+                    if isinstance(value, float):
+                        solution += "{:.2f}".format(value) + " & "
+                    else:
+                        solution += str(value) + " & "
+                solution += str(int(result[0])) + " & " + "{:.2f}".format(result[1]) + " \\\\"
+                print(solution)
+        return np.array(results)
 
-if __name__ == "__main__":
-    testCase = "HYPERPARAMETER_TUNING"
-
+def runTest(testCase):
     if testCase == "RACK":
         solver = Solver(Rack, nRows=10, lotsPerRow=30, count=10)
     elif testCase == "WAREHOUSE":
@@ -330,18 +314,46 @@ if __name__ == "__main__":
         for v in V:
             best_state, best_fitness = solver.simulate(solver.problemType.solve, n=10,name=v.__name__, visionFn=v)
             print("Best fitness: ", best_fitness)
-            solver.problemType.plot(best_state)
+            solver.problemType.plot(best_state, title=v.__name__)
         solver.plotStatistics([v.__name__ for v in V], x_axis=['V1', 'V3'], testCase=testCase)
     elif testCase == "HYPERPARAMETER_TUNING":
-        #tuner.tune()
-        #tuner.tune_efoa()
+        tuner.tune()
+        tuner.tune_efoa()
         #tuner.tune_sa()
         #tuner.tune_ga()
-        for alg in ['FOA', 'EFOA', 'GA', 'SA']:
-            tuner.tune_random(alg)
+        '''for alg in ['FOA', 'EFOA', 'GA', 'SA']:
+            results = tuner.tune_random(alg)
+            plt.scatter(results[:,1],results[:,0], label=alg)
+            ax = plt.gca()
+        plt.xlabel('Zeit (s)')
+        plt.ylabel('Fitness')
+        plt.legend()
+        plt.show()'''
+        if False:
+            for x in rows[:-2]:
+                print([result[x] for result in results[:,2]])
+                print(results[:,0])
+                plt.scatter([result[x] for result in results[:,2]],results[:,0])
+                ax = plt.gca()
+                plt.xlabel(x)
+                plt.ylabel('Fitness')
+                ax.set_title('Fitness vs. ' + x)
+                plt.show()
     else:
         functions = [solver.problemType.solve_efoa, solver.problemType.solve, solver.problemType.solve_ga, solver.problemType.solve_sa]
         solver.solve_for_fn(functions, n=10)
         solver.plotStatistics([fn.__name__ for fn in functions], x_axis=['EFOA', 'FOA', 'GA', 'SA'], testCase=testCase)
         
     
+if __name__ == "__main__":
+    testCase = "RACK"
+    
+    if len(sys.argv) > 1:
+        testCase = sys.argv[1]
+    if testCase == "ALL":
+        pool_obj = multiprocessing.Pool()
+        pool_obj.map(runTest, TEST_CASES)
+    elif testCase not in TEST_CASES:
+        raise Exception('Unknown test case: ' + testCase)
+    else:
+        runTest(testCase)
